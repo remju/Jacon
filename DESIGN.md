@@ -49,6 +49,10 @@ typedef struct Jacon_Value {
             int int_val;
             float float_val;
             double double_val;
+            struct {
+                double base;
+                double exponent;
+            } exponential;
         };
         bool* bool_val;
         Jacon_Value* array;
