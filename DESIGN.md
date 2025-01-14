@@ -77,15 +77,6 @@ typedef struct {
 } Jacon_Tokenizer;
 ```
 
-Type definitions for parsing:
-```C
-// Parser
-typedef struct {
-    Jacon_Tokenizer tokenizer;
-    Jacon_Node* root;
-} Jacon_Parser;
-```
-
 Type definitions for storing and querying:
 ```C
 // Value types
