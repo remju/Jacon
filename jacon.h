@@ -5,10 +5,17 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#define JACON_TOKENIZER_DEFAULT_CAPACITY 256
+#define JACON_TOKENIZER_DEFAULT_RESIZE_FACTOR 2
+#define JACON_NODE_DEFAULT_CHILD_CAPACITY 1
+#define JACON_NODE_DEFAULT_RESIZE_FACTOR 2
+
 // Error codes
 typedef enum {
     JACON_OK,
     JACON_END_OF_INPUT,
+    JACON_NO_MORE_TOKENS,
+    JACON_INDEX_OUT_OF_BOUND,
     JACON_NULL_PARAM,
     JACON_ERR_INVALID_JSON,
     JACON_ERR_CHAR_NOT_FOUND,
@@ -43,17 +50,16 @@ typedef struct Jacon_Node Jacon_Node;
 struct Jacon_Node {
     Jacon_Node* parent;
     char* name;
+    Jacon_ValueType type;
     Jacon_Value value;
     Jacon_Node* childs;
     size_t child_count;
+    size_t child_capacity;
     // Dictionary for efficient value retrieving
     HashMap entries;
 };
 
 // Tokenizer
-#define JACON_TOKENIZER_DEFAULT_CAPACITY 256
-#define JACON_TOKENIZER_DEFAULT_RESIZE_FACTOR 2
-
 typedef enum {
     JACON_TOKEN_STRING,
     JACON_TOKEN_INT,
@@ -90,12 +96,6 @@ typedef struct {
     Jacon_Token* tokens;
 } Jacon_Tokenizer;
 
-// Parser
-typedef struct {
-    Jacon_Tokenizer tokenizer;
-    Jacon_Node* root;
-} Jacon_Parser;
-
 /**
  * Validate a Json string input
  * Returns:
@@ -112,7 +112,7 @@ Jacon_Error
 Jacon_parse_input(Jacon_Node* root, const char* str);
 
 #endif // JACON_H
-#define JACON_IMPLEMENTATION
+
 #ifdef JACON_IMPLEMENTATION
 
 #include <string.h>
@@ -180,6 +180,89 @@ Jacon_print_tokenizer(const Jacon_Tokenizer* tokenizer)
     }
 }
 
+void 
+Jacon_print_node_value(Jacon_Value value, Jacon_ValueType type) 
+{
+    switch (type) {
+        case JACON_VALUE_STRING:
+            printf("\"%s\"", value.string_val);
+            break;
+        case JACON_VALUE_INT:
+            printf("%d", value.int_val);
+            break;
+        case JACON_VALUE_FLOAT:
+            printf("%f", value.float_val);
+            break;
+        case JACON_VALUE_DOUBLE:
+            printf("%lf", value.double_val);
+            break;
+        case JACON_VALUE_BOOLEAN:
+            printf("%s", *value.bool_val ? "true" : "false");
+            break;
+        case JACON_VALUE_NULL:
+            printf("null");
+            break;
+        case JACON_VALUE_OBJECT:
+        case JACON_VALUE_ARRAY:
+            break;
+    }
+}
+
+void 
+Jacon_print_node(Jacon_Node* node, int indent) 
+{
+    // Print indentation
+    for (int i = 0; i < indent; ++i) {
+        printf("  ");
+    }
+
+    // Print node name
+    if (node->name) {
+        printf("\"%s\": ", node->name);
+    }
+
+    // Print node value
+    switch (node->type) {
+        case JACON_VALUE_OBJECT:
+            printf("{\n");
+            for (size_t i = 0; i < node->child_count; ++i) {
+                Jacon_print_node(&node->childs[i], indent + 1);
+                if (i < node->child_count - 1) {
+                    printf(",");
+                }
+                printf("\n");
+            }
+            for (int i = 0; i < indent; ++i) {
+                printf("  ");
+            }
+            printf("}");
+            break;
+        case JACON_VALUE_ARRAY:
+            printf("[\n");
+            for (size_t i = 0; i < node->child_count; ++i) {
+                Jacon_print_node(&node->childs[i], indent + 1);
+                if (i < node->child_count - 1) {
+                    printf(",");
+                }
+                printf("\n");
+            }
+            for (int i = 0; i < indent; ++i) {
+                printf("  ");
+            }
+            printf("]");
+            break;
+        case JACON_VALUE_STRING:
+        case JACON_VALUE_INT:
+        case JACON_VALUE_FLOAT:
+        case JACON_VALUE_DOUBLE:
+        case JACON_VALUE_BOOLEAN:
+        case JACON_VALUE_NULL:
+        default:
+            Jacon_print_node_value(node->value, node->type);
+            break;
+    }
+}
+
 Jacon_Error
 Jacon_tokenizer_init(Jacon_Tokenizer* tokenizer)
 {
@@ -225,10 +308,40 @@ Jacon_append_token(Jacon_Tokenizer* tokenizer, Jacon_Token token)
     return JACON_OK;
 }
 
+Jacon_Error
+Jacon_append_child(Jacon_Node* node, Jacon_Node child)
+{
+    if (node == NULL) {
+        return JACON_NULL_PARAM;
+    }
+    if (node->childs == NULL) {
+        node->childs = (Jacon_Node*)calloc(
+            JACON_NODE_DEFAULT_CHILD_CAPACITY, sizeof(Jacon_Node));
+        if (node->childs == NULL) {
+            perror("Jacon_append_node_child array alloc error");
+            return JACON_ALLOC_ERROR;
+        }
+        node->child_capacity = JACON_NODE_DEFAULT_CHILD_CAPACITY;
+    }
+    if (node->child_count == node->child_capacity) {
+        Jacon_Node* tmp = (Jacon_Node*)realloc(
+            node->childs, 
+            node->child_capacity * JACON_NODE_DEFAULT_RESIZE_FACTOR * sizeof(Jacon_Node));
+        if (tmp == NULL) {
+            perror("Jacon_append_node_child array realloc error");
+            return JACON_ALLOC_ERROR;
+        }
+        node->childs = tmp;
+        node->child_capacity *= JACON_NODE_DEFAULT_RESIZE_FACTOR;
+    }
+
+    node->childs[node->child_count++] = child;
+    return JACON_OK;
+}
+
 Jacon_Error 
 Jacon_parse_token(Jacon_Token* token, const char** str) 
 {
-    // printf("working str: %s\n", *str);
     switch (**str) {
         case ',':
             token->type = JACON_TOKEN_COMMA;
@@ -295,14 +408,11 @@ Jacon_parse_token(Jacon_Token* token, const char** str)
 
                 // Parse an int
                 int ival = (int)strtol(*str, &endptr, 10);
-                printf("%zu\n", *endptr);
-                if (isspace(*endptr) || *endptr == ',' || *endptr == ']' || *endptr == '}'
+                if ((isspace(*endptr) || *endptr == ',' || *endptr == ']' || *endptr == '}')
                  && ival >= INT_MIN && ival <= INT_MAX) {
                     token->int_val = ival;
                     token->type = JACON_TOKEN_INT;
                     *str = endptr;
-                    puts("===========");
-                    printf("%c\n", *endptr);
                     break;
                 }
 
@@ -331,14 +441,15 @@ Jacon_parse_token(Jacon_Token* token, const char** str)
     return JACON_OK;
 }
 
-Jacon_Error Jacon_tokenize(Jacon_Tokenizer* tokenizer, const char* str) {
+Jacon_Error 
+Jacon_tokenize(Jacon_Tokenizer* tokenizer, const char* str) 
+{
     Jacon_Error ret;
 
     while (*str) {
         Jacon_Token token;
         ret = Jacon_parse_token(&token, &str);
         if (ret != JACON_OK) return ret;
-        if (token.type == JACON_TOKEN_INT) puts("found int");
         ret = Jacon_append_token(tokenizer, token);
         if (ret != JACON_OK) return ret;
     }
@@ -346,8 +457,175 @@ Jacon_Error Jacon_tokenize(Jacon_Tokenizer* tokenizer, const char* str) {
     return JACON_OK;
 }
 
+/**
+ * Validate a Jacon tokenizer result
+ */
 Jacon_Error
 Jacon_validate_input(Jacon_Tokenizer* tokenizer)
+{
+    (void)tokenizer;
+    return JACON_OK;
+}
+
+Jacon_Error
+Jacon_current_token(Jacon_Token* token, Jacon_Tokenizer* tokenizer, size_t* current_index)
+{
+    if (*current_index >= tokenizer->count) return JACON_INDEX_OUT_OF_BOUND;
+    *token = tokenizer->tokens[*current_index];
+    return JACON_OK;
+}
+
+Jacon_Error
+Jacon_consume_token(Jacon_Token* token, Jacon_Tokenizer* tokenizer, size_t* current_index)
+{
+    if (*current_index >= tokenizer->count) return JACON_INDEX_OUT_OF_BOUND;
+    *token = tokenizer->tokens[*current_index + 1];
+    *current_index += 1;
+    return JACON_OK;
+}
+
+Jacon_Error
+Jacon_parse_node(Jacon_Node* node, Jacon_Tokenizer* tokenizer, size_t* current_index)
+{
+    int ret = JACON_OK;
+    Jacon_Token current_token;
+    ret = Jacon_current_token(&current_token, tokenizer, current_index);
+    if (ret != JACON_OK) return ret;
+    switch (current_token.type) {
+        case JACON_TOKEN_OBJECT_START:
+            node->type = JACON_VALUE_OBJECT;
+
+            ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+            if (ret != JACON_OK) return ret;
+            while (current_token.type != JACON_TOKEN_OBJECT_END) {
+                Jacon_Node child = {0};
+                child.parent = node;
+                ret = Jacon_parse_node(&child, tokenizer, current_index);
+                if (ret != JACON_OK) return ret;
+
+                ret = Jacon_append_child(node, child);
+                if (ret != JACON_OK) return ret;
+                ret = Jacon_current_token(&current_token, tokenizer, current_index);
+                if (ret != JACON_OK) return ret;
+            }
+            ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+            if (ret != JACON_OK) return ret;
+            break;
+
+        case JACON_TOKEN_ARRAY_START:
+            node->type = JACON_VALUE_ARRAY;
+            ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+            if (ret != JACON_OK) return ret;
+            while (current_token.type != JACON_TOKEN_ARRAY_END) {
+                Jacon_Node child = {0};
+                child.parent = node;
+                ret = Jacon_parse_node(&child, tokenizer, current_index);
+                if (ret != JACON_OK) return ret;
+
+                ret = Jacon_append_child(node, child);
+                if (ret != JACON_OK) return ret;
+                ret = Jacon_current_token(&current_token, tokenizer, current_index);
+                if (ret != JACON_OK) return ret;
+            }
+            ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+            if (ret != JACON_OK) return ret;
+            break;
+
+        case JACON_TOKEN_STRING:
+            if (node->type == JACON_VALUE_STRING) {
+                node->value.string_val = strdup(current_token.string_val);
+                ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+            if (ret != JACON_OK) return ret;
+            }
+            else if (node->parent->type == JACON_VALUE_ARRAY) {
+                node->type = JACON_VALUE_STRING;
+                node->value.string_val = strdup(current_token.string_val);
+                ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+            if (ret != JACON_OK) return ret;
+            }
+            else {
+                node->type = JACON_VALUE_STRING;
+                node->name = strdup(current_token.string_val);
+                ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+                if (ret != JACON_OK) return ret;
+                ret = Jacon_parse_node(node, tokenizer, current_index);
+                if (ret != JACON_OK) return ret;
+            }
+            break;
+
+        case JACON_TOKEN_BOOLEAN:
+            node->type = JACON_VALUE_BOOLEAN;
+            node->value.bool_val = &current_token.bool_val;
+            ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+            if (ret != JACON_OK) return ret;
+            break;
+
+        case JACON_TOKEN_INT:
+            node->type = JACON_VALUE_INT;
+            node->value.int_val = current_token.int_val;
+            ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+            if (ret != JACON_OK) return ret;
+            break;
+
+        case JACON_TOKEN_FLOAT:
+            node->type = JACON_VALUE_FLOAT;
+            node->value.float_val = current_token.float_val;
+            ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+            if (ret != JACON_OK) return ret;
+            break;
+
+        case JACON_TOKEN_DOUBLE:
+            node->type = JACON_VALUE_DOUBLE;
+            node->value.double_val = current_token.double_val;
+            ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+            if (ret != JACON_OK) return ret;
+            break;
+
+        case JACON_TOKEN_NULL:
+            node->type = JACON_VALUE_NULL;
+            ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+            if (ret != JACON_OK) return ret;
+            break;
+            
+        case JACON_TOKEN_OBJECT_END:
+            return JACON_ERR_INVALID_JSON;
+        case JACON_TOKEN_ARRAY_END:
+            return JACON_ERR_INVALID_JSON;
+        case JACON_TOKEN_COLON:
+            ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+            if (ret != JACON_OK) return ret;
+            return Jacon_parse_node(node, tokenizer, current_index);
+        case JACON_TOKEN_COMMA:
+            ret = Jacon_consume_token(&current_token, tokenizer, current_index);
+            if (ret != JACON_OK) return ret;
+            return Jacon_parse_node(node, tokenizer, current_index);
+        default:
+            return JACON_ERR_INVALID_JSON;
+            break;
+    }
+    return JACON_OK;
+}
+
+/**
+ * Parse a Jacon tokenizer content into a queryable C variable
+ */
+Jacon_Error
+Jacon_parse_tokens(Jacon_Node* root, Jacon_Tokenizer* tokenizer)
+{
+    int ret;
+    size_t current_index = 0;
+    while(current_index < tokenizer->count) {
+        ret = Jacon_parse_node(root, tokenizer, &current_index);
+        if (ret != JACON_OK && ret != JACON_NO_MORE_TOKENS) return ret;
+    }
+    return JACON_OK;
+}
+
+/**
+ * Parse a Jacon node into a valid json string
+ */
+Jacon_Error
+Jacon_parse_object()
 {
     return JACON_OK;
 }
@@ -361,13 +639,16 @@ Jacon_parse_input(Jacon_Node* root, const char* str)
     ret = Jacon_tokenize(&tokenizer, str);
     if (ret != JACON_OK) return ret;
 
-    Jacon_print_tokenizer(&tokenizer);
+    // Jacon_print_tokenizer(&tokenizer);
 
     // TODO : validate json input
     ret = Jacon_validate_input(&tokenizer);
     if (ret != JACON_OK) return ret;
 
-    // For now we will say that every things that goes through here is a valid json input
+    // For now we will say that everything that goes through here is a valid json input
+
+    ret = Jacon_parse_tokens(root, &tokenizer);
+    if (ret != JACON_OK) return ret;
 
     return JACON_OK;
 }
