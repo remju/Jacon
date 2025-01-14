@@ -19,8 +19,8 @@ Single header file library (stb style)
 #include "jacon.h"
 ```
 
-defining 'JACON_IMPLEMENTATION' gives you access to functions implementations
-only including the header file gives you access to definitions only
+defining 'JACON_IMPLEMENTATION' gives you access to functions definitions,
+only including the header file gives you access to declarations only
 
 ```C
 typedef enum Jacon_NodeType {
@@ -39,8 +39,8 @@ typedef enum Jacon_ValueType {
     JACON_VALUE_NULL,
 };
 
-typedef Jacon_Array Jacon_Value*;
-typedef Jacon_Object Jacon_Node;
+typedef Jacon_Value* Jacon_Array;
+typedef Jacon_Node Jacon_Object;
 
 typedef struct Jacon_Value {
     union {
@@ -61,7 +61,7 @@ typedef struct Jacon_Value {
 };
 
 typedef struct Jacon_Node {
-    Jacon_Node parent;
+    Jacon_Node* parent;
     Jacon_NodeType type;
     char* name;
     Jacon_Value value;
@@ -119,6 +119,9 @@ Parse an object into a string:
 ```C
 char* parsed_object = Jacon_parse_object(&root);
 ```
+
+# Parsing Json
+Tokenize the input string for easier valdiating and parsing. 
 
 # References
 - [json.org](https://www.json.org/json-en.html)
