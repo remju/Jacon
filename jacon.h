@@ -371,6 +371,11 @@ Jacon_parse_token(Jacon_Token* token, const char** str)
             (*str)++; // Move past the initial quote
             const char* string_end = strchr(*str, '"');
             if (string_end == NULL) return JACON_ERR_CHAR_NOT_FOUND;
+            // While the double quote is escaped, find the next one
+            while (string_end[-1] == '\\') {
+                string_end = strchr(string_end + 1, '"');
+                if (string_end == NULL) return JACON_ERR_CHAR_NOT_FOUND;
+            }
             token->type = JACON_TOKEN_STRING;
             size_t string_size = string_end - *str;
             token->string_val = (char*)calloc(string_size + 1, sizeof(char));
