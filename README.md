@@ -11,6 +11,10 @@ Add this where you plan to use Jacon and ... use it ?
 #include "jacon.h"
 ```
 
+# Tests
+Inputs tested using validation files from:
+- [JSONTestSuite](https://github.com/nst/JSONTestSuite)
+
 # Origin of Jacon
 - Name :
 Json -> Jason, Jason is already used in other langages for parsing Json.
