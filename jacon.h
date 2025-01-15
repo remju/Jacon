@@ -413,8 +413,8 @@ Jacon_parse_token(Jacon_Token* token, const char** str)
 
                 // Parse an int
                 int ival = (int)strtol(*str, &endptr, 10);
-                if ((isspace(*endptr) || *endptr == ',' || *endptr == ']' || *endptr == '}')
-                 && ival >= INT_MIN && ival <= INT_MAX) {
+                if ((isspace(*endptr) || *endptr == ',' || *endptr == ']' || *endptr == '}' || *endptr == '\0')
+                    && ival >= INT_MIN && ival <= INT_MAX) {
                     token->int_val = ival;
                     token->type = JACON_TOKEN_INT;
                     *str = endptr;
@@ -423,7 +423,7 @@ Jacon_parse_token(Jacon_Token* token, const char** str)
 
                 // Parse a double and check for float cast
                 double dval = strtod(*str, &endptr);
-                if(!isspace(*endptr) && *endptr != ',' && *endptr != ']' && *endptr != '}')
+                if(!isspace(*endptr) && *endptr != ',' && *endptr != ']' && *endptr != '}' && *endptr != '\0')
                     return JACON_ERR_INVALID_JSON;
 
                 if (fabs(dval) <= FLT_MAX && fabs(dval) >= FLT_MIN) {
@@ -452,8 +452,9 @@ Jacon_tokenize(Jacon_Tokenizer* tokenizer, const char* str)
     Jacon_Error ret;
 
     while (*str) {
-        Jacon_Token token;
+        Jacon_Token token = {0};
         ret = Jacon_parse_token(&token, &str);
+        if (ret == JACON_END_OF_INPUT) return JACON_OK;
         if (ret != JACON_OK) return ret;
         ret = Jacon_append_token(tokenizer, token);
         if (ret != JACON_OK) return ret;
@@ -540,13 +541,13 @@ Jacon_parse_node(Jacon_Node* node, Jacon_Tokenizer* tokenizer, size_t* current_i
             if (node->type == JACON_VALUE_STRING) {
                 node->value.string_val = strdup(current_token.string_val);
                 ret = Jacon_consume_token(&current_token, tokenizer, current_index);
-            if (ret != JACON_OK) return ret;
+                if (ret != JACON_OK) return ret;
             }
-            else if (node->parent->type == JACON_VALUE_ARRAY) {
+            else if (node->parent != NULL && node->parent->type == JACON_VALUE_ARRAY) {
                 node->type = JACON_VALUE_STRING;
                 node->value.string_val = strdup(current_token.string_val);
                 ret = Jacon_consume_token(&current_token, tokenizer, current_index);
-            if (ret != JACON_OK) return ret;
+                if (ret != JACON_OK) return ret;
             }
             else {
                 node->type = JACON_VALUE_STRING;
@@ -592,10 +593,6 @@ Jacon_parse_node(Jacon_Node* node, Jacon_Tokenizer* tokenizer, size_t* current_i
             if (ret != JACON_OK) return ret;
             break;
             
-        case JACON_TOKEN_OBJECT_END:
-            return JACON_ERR_INVALID_JSON;
-        case JACON_TOKEN_ARRAY_END:
-            return JACON_ERR_INVALID_JSON;
         case JACON_TOKEN_COLON:
             ret = Jacon_consume_token(&current_token, tokenizer, current_index);
             if (ret != JACON_OK) return ret;
@@ -604,6 +601,49 @@ Jacon_parse_node(Jacon_Node* node, Jacon_Tokenizer* tokenizer, size_t* current_i
             ret = Jacon_consume_token(&current_token, tokenizer, current_index);
             if (ret != JACON_OK) return ret;
             return Jacon_parse_node(node, tokenizer, current_index);
+        case JACON_TOKEN_OBJECT_END:
+        case JACON_TOKEN_ARRAY_END:
+        default:
+            return JACON_ERR_INVALID_JSON;
+            break;
+    }
+    return JACON_OK;
+}
+
+Jacon_Error
+Jacon_parse_value(Jacon_Node* root, Jacon_Token token)
+{
+    switch (token.type) {
+        case JACON_TOKEN_STRING:
+            root->type = JACON_VALUE_STRING;
+            root->value.string_val = strdup(token.string_val);
+            if (root->value.string_val == NULL) return JACON_ALLOC_ERROR;
+            break;
+        case JACON_TOKEN_INT:
+            root->type = JACON_VALUE_INT;
+            root->value.int_val = token.int_val;
+            break;
+        case JACON_TOKEN_DOUBLE:
+            root->type = JACON_VALUE_DOUBLE;
+            root->value.double_val = token.double_val;
+            break;
+        case JACON_TOKEN_FLOAT:
+            root->type = JACON_VALUE_FLOAT;
+            root->value.float_val = token.float_val;
+            break;
+        case JACON_TOKEN_BOOLEAN:
+            root->type = JACON_VALUE_BOOLEAN;
+            root->value.bool_val = &token.bool_val;
+            break;
+        case JACON_TOKEN_NULL:
+            root->type = JACON_VALUE_NULL;
+            break;
+        case JACON_TOKEN_ARRAY_START:
+        case JACON_TOKEN_ARRAY_END:
+        case JACON_TOKEN_OBJECT_START:
+        case JACON_TOKEN_OBJECT_END:
+        case JACON_TOKEN_COLON:
+        case JACON_TOKEN_COMMA:
         default:
             return JACON_ERR_INVALID_JSON;
             break;
@@ -617,6 +657,8 @@ Jacon_parse_node(Jacon_Node* node, Jacon_Tokenizer* tokenizer, size_t* current_i
 Jacon_Error
 Jacon_parse_tokens(Jacon_Node* root, Jacon_Tokenizer* tokenizer)
 {
+    if (tokenizer->count == 1) 
+        return Jacon_parse_value(root, tokenizer->tokens[0]);
     int ret;
     size_t current_index = 0;
     while(current_index < tokenizer->count) {
@@ -643,8 +685,6 @@ Jacon_parse_input(Jacon_Node* root, const char* str)
     Jacon_Error ret;
     ret = Jacon_tokenize(&tokenizer, str);
     if (ret != JACON_OK) return ret;
-
-    // Jacon_print_tokenizer(&tokenizer);
 
     // TODO : validate json input
     ret = Jacon_validate_input(&tokenizer);
