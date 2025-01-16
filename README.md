@@ -1,4 +1,4 @@
-https://github.com/julien-remmery-vinci/Jacon/actions/workflows/ci.yml/badge.svg
+![Build Status](https://github.com/julien-remmery-vinci/Jacon/actions/workflows/ci.yml/badge.svg)
 # Jacon
 Easy to use Json parsing library in C
 
