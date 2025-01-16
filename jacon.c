@@ -7,7 +7,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-
 void
 print_error(Jacon_Error error)
 {
@@ -15,7 +14,7 @@ print_error(Jacon_Error error)
         case JACON_ERR_INDEX_OUT_OF_BOUND:
             puts("Jacon error: JACON_INDEX_OUT_OF_BOUND");
             break;
-        case JACON_ERR_ALLOC:
+        case JACON_ERR_MEMORY_ALLOCATION:
             puts("Jacon error: JACON_ALLOC_ERROR");
             break;
         case JACON_ERR_CHAR_NOT_FOUND:
@@ -35,6 +34,12 @@ print_error(Jacon_Error error)
             break;
         case JACON_ERR_UNREACHABLE_STATEMENT:
             puts("Jacon error: JACON_ERROR_UNREACHABLE_STATEMENT");
+            break;
+        case JACON_ERR_INVALID_VALUE_TYPE:
+            puts("Jacon error: JACON_ERR_INVALID_VALUE_TYPE");
+            break;
+        case JACON_ERR_EMPTY_INPUT:
+            puts("Jacon error: JACON_ERR_EMPTY_INPUT");
             break;
         case JACON_END_OF_INPUT:
         case JACON_OK:
@@ -69,7 +74,7 @@ main(int argc, const char** argv)
     char* json_str = (char*)malloc(file_size + 1 * sizeof(char));
     if (json_str == NULL) {
         perror("malloc error");
-        return JACON_ERR_ALLOC;
+        return JACON_ERR_MEMORY_ALLOCATION;
     }
 
     ssize_t nrread = read(fd, json_str, sizeof(char) * file_size);
@@ -85,10 +90,11 @@ main(int argc, const char** argv)
     if (found != NULL) exit(EXIT_FAILURE);
     json_str[file_size] = '\0';
 
-    Jacon_Node root = {0};
+    Jacon_content content;
+    Jacon_init_content(&content);
     struct timeval start, end;
     gettimeofday(&start, NULL);
-    int ret = Jacon_parse_input(&root, json_str);
+    int ret = Jacon_parse_input(&content, json_str);
     gettimeofday(&end, NULL);
     
     double parse_timing =
@@ -97,10 +103,14 @@ main(int argc, const char** argv)
     print_error(ret);
 
     free(json_str);
-    Jacon_free_node(&root);
+    Jacon_free_node(content.root);
     if (ret != JACON_OK) return ret;
 
     printf("Parse time: %lf ms\n", parse_timing);
+
+    char* str_Value;
+    ret = Jacon_value_type_to_str(JACON_VALUE_OBJECT, &str_Value);
+    puts(str_Value);
 
     return JACON_OK;
 }
