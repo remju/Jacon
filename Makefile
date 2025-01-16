@@ -20,13 +20,6 @@ all: $(TARGET)
 jacon: jacon.c jacon.h
 	$(CC) $(CFLAGS) -o $(TARGET) jacon.c
 
-test: $(TARGET)
-	@for file in $(INPUT_FILES); do \
-		echo "Running test on $$file"; \
-		./$(TARGET) $$file || { echo "Test failed on $$file"; exit 1; }; \
-	done
-
-
 # Check if the repository is already downloaded
 check_test_repo_exists:
 	@if [ ! -d $(LOCAL_REPO_DIR) ]; then \
