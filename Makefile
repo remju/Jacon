@@ -96,10 +96,10 @@ valgrind_test: $(TARGET)
 		echo "Running test on rejected file $$file using Valgrind"; \
 		$(VALGRIND_CMD) ./$(TARGET) $$file >> $(LOG_DIR)/valgrind.log 2>&1; \
 		if grep -q "ERROR SUMMARY: 0 errors from 0 contexts" $(LOG_DIR)/valgrind.log; then \
-			echo "Valgrind unexpectedly passed for $$file" >> $(LOG_DIR)/valgrind.log; \
-			exit 1; \
+			echo "Valgrind passed for $$file" >> $(LOG_DIR)/valgrind.log; \
 		else \
-			echo "Valgrind correctly found errors for $$file" >> $(LOG_DIR)/valgrind.log; \
+			echo "Valgrind found errors for $$file" >> $(LOG_DIR)/valgrind.log; \
+			exit 1; \
 		fi; \
 	done
 
