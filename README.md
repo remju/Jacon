@@ -1,6 +1,9 @@
 # Jacon
 Easy to use Json parsing library in C
 
+# Development
+This library is in development and is not ready for use.
+
 # Description
 Convert an input string into a queryable object or an object into a string.
 
@@ -24,3 +27,6 @@ As easy as that.
 - Why : I want to experience building a json parser, I plan to use it in my C webserver implementation.
 
 - Why tho : Building things from sratch is fun.
+
+# Thanks
+- Thanks to - [JSONTestSuite](https://github.com/nst/JSONTestSuite) for the test files.
