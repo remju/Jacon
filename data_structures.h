@@ -248,16 +248,21 @@ hm_remove(HashMap* map, char* key){
 void 
 hm_free(HashMap* map) 
 {
+    if (map == NULL || map->entries == NULL)
+        return;
     for (size_t i = 0; i < map->size; i++) {
         HashMapEntry* entry = map->entries[i];
-        while (entry != NULL) {
+        if (entry != NULL) {
             HashMapEntry* next = entry->next_entry;
             free(entry->key);
+            entry->key = NULL;
             free(entry);
+            entry = NULL;
             entry = next;
         }
     }
     free(map->entries);
+    map->entries = NULL;
 }
 
 #endif

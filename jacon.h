@@ -129,6 +129,11 @@ Jacon_value_type_to_str(Jacon_ValueType type, char** str);
 
 #ifdef JACON_IMPLEMENTATION
 
+// Used for hashmaps
+#define DATA_STRUCTURES_IMPLEMENTATION
+#include "data_structures.h"
+
+// Used for string builder utility, and possibly logging if needed
 #define JUTILS_IMPLEMENTATION
 #include "jutils.h"
 #include <string.h>
@@ -1066,9 +1071,72 @@ Jacon_parse_tokens(Jacon_Node* root, Jacon_Tokenizer* tokenizer)
 }
 
 Jacon_Error
+Jacon_add_node_to_map(HashMap* map, Jacon_Node* node, StringBuilder path_to_node)
+{
+    if (map == NULL || node == NULL)
+        return JACON_ERR_NULL_PARAM;
+
+    int ret;
+
+    char* str_value;
+    ret = Jacon_value_type_to_str(node->type, &str_value);
+    if (ret != JACON_OK) return ret;
+
+    // Append node name to current path
+    printf("Node name: %s\n", node->name);
+    if (node->name != NULL)
+        Ju_str_append_null(&path_to_node, node->name);
+    
+    // If node type is object we do not add yet
+    // It will be added when we arrive at the final value
+    // We will not allow retrieving a full object
+    // Only retriving a single value is allowed for now
+    // Single value won't change
+    // Full object is subject to change if it appears to be needed
+    if (node->type != JACON_VALUE_OBJECT)
+        hm_put(map, path_to_node.items, node);
+
+    // Add a dot between current path and next name
+    // Next name will be appended in next recursive fn call and so on
+    if (node->name != NULL && node->type == JACON_VALUE_OBJECT)
+        Ju_str_append_null(&path_to_node, ".");
+
+
+    for (size_t index = 0; index < node->child_count; index++)
+    {
+        StringBuilder child_path = {0};
+        if (path_to_node.count > 0) {
+            child_path.items = strdup(path_to_node.items);
+            if (child_path.items == NULL)
+                return JACON_ERR_MEMORY_ALLOCATION;
+            child_path.count = path_to_node.count;
+            child_path.capacity = path_to_node.capacity;
+        }
+        ret = Jacon_add_node_to_map(map, &node->childs[index], child_path);
+        Ju_str_free(&child_path);
+    }
+    return JACON_OK;    
+}
+
+Jacon_Error
 Jacon_build_content(Jacon_content* content)
 {
-    (void)content;
+    // TODO
+    content->entries = hm_create(10);
+    StringBuilder builder = {0};
+    Jacon_add_node_to_map(&content->entries, content->root, builder);
+    Ju_str_free(&builder);
+    return JACON_OK;
+}
+
+Jacon_Error
+Jacon_free_content(Jacon_content* content)
+{
+    if (content == NULL)
+        return JACON_ERR_NULL_PARAM;
+
+    hm_free(&content->entries);
+    Jacon_free_node(content->root);
     return JACON_OK;
 }
 
@@ -1297,6 +1365,9 @@ Jacon_parse_input(Jacon_content* content, const char* str)
         return ret;
     }
     Jacon_free_tokenizer(&tokenizer);
+
+    ret = Jacon_build_content(content);
+    if (ret != JACON_OK) return ret;
 
     return JACON_OK;
 }

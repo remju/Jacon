@@ -65,6 +65,7 @@ main(int argc, const char** argv)
     struct stat fileStat;
     if (fstat(fd, &fileStat) == -1) {
         perror("fstat failed");
+        close(fd);
         return -1;
     }
     off_t file_size = fileStat.st_size;
@@ -74,6 +75,7 @@ main(int argc, const char** argv)
     char* json_str = (char*)malloc(file_size + 1 * sizeof(char));
     if (json_str == NULL) {
         perror("malloc error");
+        close(fd);
         return JACON_ERR_MEMORY_ALLOCATION;
     }
 
@@ -87,7 +89,11 @@ main(int argc, const char** argv)
 
     // TODO : move in parsing process
     const char *found = memchr(json_str, '\0', file_size);
-    if (found != NULL) exit(EXIT_FAILURE);
+    if (found != NULL) {
+        free(json_str);
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
     json_str[file_size] = '\0';
 
     Jacon_content content;
@@ -103,14 +109,11 @@ main(int argc, const char** argv)
     print_error(ret);
 
     free(json_str);
-    Jacon_free_node(content.root);
+    close(fd);
+    ret = Jacon_free_content(&content);
     if (ret != JACON_OK) return ret;
 
     printf("Parse time: %lf ms\n", parse_timing);
-
-    char* str_Value;
-    ret = Jacon_value_type_to_str(JACON_VALUE_OBJECT, &str_Value);
-    puts(str_Value);
 
     return JACON_OK;
 }
