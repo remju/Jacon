@@ -1,0 +1,22 @@
+[
+    "Hello, World!",
+    true,
+    false,
+    null,
+    1,
+    3.14159,
+    2.718281828459045,
+    5.97219e24,
+    {
+        "property": "Hello, World!"
+    },
+    {},
+    ["Hello", "World"],
+    [],
+    {
+        "nestedProperty": {
+            "innerProperty": "Nested Hello"
+        }
+    },
+    [[1, -2], [-3, 4]]
+]
