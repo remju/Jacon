@@ -106,8 +106,45 @@ main(int argc, const char** argv)
     double parse_timing =
         (double)((end.tv_sec - start.tv_sec) * 1000000 + end.tv_usec - start.tv_usec) / 1000;
     
-    print_error(ret);
+    print_error(ret);    
 
+    // Single values
+    // char* string;
+    // Jacon_get_string(&content, &string);
+    // puts(string);
+    // int i;
+    // Jacon_get_int(&content, &i);
+    // printf("%d\n", i);
+    // double d;
+    // Jacon_get_double(&content, &d);
+    // printf("%f\n", d);
+    float f;
+    Jacon_get_float(&content, &f);
+    printf("%f\n", f);
+
+    // Object based
+    // char* string;
+    // Jacon_get_string_by_name(&content, "string", &string);
+    // puts(string);
+    // char* nested_str;
+    // Jacon_get_string_by_name(&content, "nestedobject.nestedProperty.innerProperty", &nested_str);
+    // puts(nested_str);
+    // int i;
+    // Jacon_get_int_by_name(&content, "int", &i);
+    // printf("%d\n", i);
+    // float f;
+    // Jacon_get_float_by_name(&content, "float", &f);
+    // printf("%f\n", f);
+    // double d;
+    // Jacon_get_double_by_name(&content, "double", &d);
+    // printf("%f\n", d);
+    // bool tb;
+    // Jacon_get_bool_by_name(&content, "truebool", &tb);
+    // printf("%d\n", tb);
+    // bool fb;
+    // Jacon_get_bool_by_name(&content, "falsebool", &fb);
+    // printf("%d\n", fb);
+    
     free(json_str);
     close(fd);
     ret = Jacon_free_content(&content);
