@@ -65,6 +65,7 @@ main(int argc, const char** argv)
     struct stat fileStat;
     if (fstat(fd, &fileStat) == -1) {
         perror("fstat failed");
+        close(fd);
         return -1;
     }
     off_t file_size = fileStat.st_size;
@@ -74,6 +75,7 @@ main(int argc, const char** argv)
     char* json_str = (char*)malloc(file_size + 1 * sizeof(char));
     if (json_str == NULL) {
         perror("malloc error");
+        close(fd);
         return JACON_ERR_MEMORY_ALLOCATION;
     }
 
@@ -87,7 +89,11 @@ main(int argc, const char** argv)
 
     // TODO : move in parsing process
     const char *found = memchr(json_str, '\0', file_size);
-    if (found != NULL) exit(EXIT_FAILURE);
+    if (found != NULL) {
+        free(json_str);
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
     json_str[file_size] = '\0';
 
     Jacon_content content;
@@ -100,17 +106,54 @@ main(int argc, const char** argv)
     double parse_timing =
         (double)((end.tv_sec - start.tv_sec) * 1000000 + end.tv_usec - start.tv_usec) / 1000;
     
-    print_error(ret);
+    print_error(ret);    
 
+    // Single values
+    // char* string;
+    // Jacon_get_string(&content, &string);
+    // puts(string);
+    // int i;
+    // Jacon_get_int(&content, &i);
+    // printf("%d\n", i);
+    // double d;
+    // Jacon_get_double(&content, &d);
+    // printf("%f\n", d);
+    // float f;
+    // Jacon_get_float(&content, &f);
+    // printf("%f\n", f);
+
+    // Object based
+    char* string;
+    Jacon_get_string_by_name(&content, "string", &string);
+    puts(string);
+    bool tb;
+    Jacon_get_bool_by_name(&content, "truebool", &tb);
+    printf("%s\n", tb ? "true" : "false");
+    bool fb;
+    Jacon_get_bool_by_name(&content, "falsebool", &fb);
+    printf("%s\n", fb ? "true" : "false");
+    int i;
+    Jacon_get_int_by_name(&content, "int", &i);
+    printf("%d\n", i);
+    float f;
+    Jacon_get_float_by_name(&content, "float", &f);
+    printf("%f\n", f);
+    double d;
+    Jacon_get_double_by_name(&content, "double", &d);
+    printf("%.15f\n", d);
+    char* object;
+    Jacon_get_string_by_name(&content, "object.property", &object);
+    puts(object);
+    char* nested_str;
+    Jacon_get_string_by_name(&content, "nestedobject.nestedProperty.innerProperty", &nested_str);
+    puts(nested_str);
+    
     free(json_str);
-    Jacon_free_node(content.root);
+    close(fd);
+    ret = Jacon_free_content(&content);
     if (ret != JACON_OK) return ret;
 
     printf("Parse time: %lf ms\n", parse_timing);
-
-    char* str_Value;
-    ret = Jacon_value_type_to_str(JACON_VALUE_OBJECT, &str_Value);
-    puts(str_Value);
 
     return JACON_OK;
 }

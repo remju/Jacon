@@ -39,6 +39,9 @@ Ju_str_free(StringBuilder *builder);
 void 
 Ju_str_append(StringBuilder* builder, ...) 
 {
+    if (builder == NULL) {
+        return;
+    }
     va_list args;
     va_start(args, builder);
 
@@ -46,18 +49,20 @@ Ju_str_append(StringBuilder* builder, ...)
     while (arg != NULL) 
     {
         size_t size = strlen(arg);
-        if (builder->count + size > builder->capacity)
-        {
-            builder->items = realloc(builder->items, size+1 * sizeof(char));
-            CHECK(builder->items != NULL, "Ju_str_append realloc error");
-            builder->capacity += size+1;
+        if (size > 0) {
+            if (builder->count + size + 1 > builder->capacity)
+            {
+                size_t new_capacity = builder->count + size + 1;
+                builder->items = realloc(builder->items, new_capacity * sizeof(char));
+                CHECK(builder->items != NULL, "Ju_str_append realloc error");
+                builder->capacity = new_capacity;
+            }
+            strncpy(builder->items + builder->count, arg, size);
+            builder->count += size;
+            builder->items[builder->count] = '\0';
         }
-        strncpy(builder->items + builder->count, arg, size);
-        builder->count += size;
         arg = va_arg(args, const char*);
     }
-    // Add null terminating byte
-    builder->items[builder->count - 1] = '\0';
 
     va_end(args);
 }
@@ -65,7 +70,11 @@ Ju_str_append(StringBuilder* builder, ...)
 void
 Ju_str_free(StringBuilder *builder)
 {
-    free(builder->items);
+    if (builder->items != NULL) 
+    {
+        free(builder->items);
+        builder->items = NULL;
+    }
 }
 
 #endif // JUTILS_IMPLEMENTATION

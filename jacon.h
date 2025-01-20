@@ -129,6 +129,11 @@ Jacon_value_type_to_str(Jacon_ValueType type, char** str);
 
 #ifdef JACON_IMPLEMENTATION
 
+// Used for hashmaps
+#define DATA_STRUCTURES_IMPLEMENTATION
+#include "data_structures.h"
+
+// Used for string builder utility, and possibly logging if needed
 #define JUTILS_IMPLEMENTATION
 #include "jutils.h"
 #include <string.h>
@@ -356,9 +361,8 @@ Jacon_free_node(Jacon_Node* node)
     if (node->name != NULL) {
         free(node->name);
     }
-    if (node->type == JACON_VALUE_STRING) {
+    if (node->type == JACON_VALUE_STRING && node->value.string_val != NULL) {
         free(node->value.string_val);
-        return;
     }
     if (node->type == JACON_VALUE_ARRAY || node->type == JACON_VALUE_OBJECT) {
         for (size_t i = 0; i < node->child_count; i++)
@@ -592,24 +596,23 @@ Jacon_parse_token(Jacon_Token* token, const char** str)
                     break;
                 }
 
-                // Parse a double and check for float cast
                 double dval = strtod(*str, &endptr);
-                if(!isspace(*endptr) && *endptr != ',' && *endptr != ']' && *endptr != '}' && *endptr != '\0')
+    
+                // Ensure the number is followed by valid JSON characters
+                if (!isspace(*endptr) && *endptr != ',' && *endptr != ']' && *endptr != '}' && *endptr != '\0') {
                     return JACON_ERR_INVALID_JSON;
-
-                else if (fabs(dval) <= FLT_MAX && fabs(dval) >= FLT_MIN) {
-                    float fval = (float)dval;
-                    if (fabs(dval - fval) <= FLT_EPSILON) {
-                        token->type = JACON_TOKEN_FLOAT;
-                        token->float_val = fval;
-                    } else {
-                        token->type = JACON_TOKEN_DOUBLE;
-                        token->double_val = dval;
-                    }
-                } else {
+                }
+                
+                float fval = (float)dval;
+                double recast = (double)fval;
+                if (dval > recast) {
                     token->type = JACON_TOKEN_DOUBLE;
                     token->double_val = dval;
+                } else {
+                    token->type = JACON_TOKEN_FLOAT;
+                    token->float_val = fval;
                 }
+
                 *str = endptr;
             }
             else return JACON_ERR_INVALID_JSON;
@@ -1066,26 +1069,144 @@ Jacon_parse_tokens(Jacon_Node* root, Jacon_Tokenizer* tokenizer)
 }
 
 Jacon_Error
+Jacon_add_node_to_map(HashMap* map, Jacon_Node* node, const char* path_to_node)
+{
+    if (map == NULL || node == NULL)
+        return JACON_ERR_NULL_PARAM;
+
+    if (node->type == JACON_VALUE_OBJECT && node->child_count == 0) {
+        // No need to add to map since there are no values in the object
+        return JACON_OK;
+    }
+
+    int ret;
+
+    StringBuilder builder = {0};
+    Ju_str_append_null(&builder, path_to_node);
+    Ju_str_append_null(&builder, node->name);
+
+    // If node type is object we do not add yet
+    // It will be added when we arrive at the final value
+    // We will not allow retrieving a full object
+    // Only retriving a single value is allowed for now
+    // Single value won't change
+    // Full object is subject to change if it appears to be needed
+    if (node->type != JACON_VALUE_OBJECT) {
+        hm_put(map, builder.items, node);
+        Ju_str_free(&builder);
+        return JACON_OK;
+    }
+
+    // Add a dot between current path and next name
+    // Next name will be appended in next recursive fn call and so on
+    if (node->name != NULL) {
+        Ju_str_append_null(&builder, ".");
+    }
+
+    for (size_t index = 0; index < node->child_count; index++)
+    {
+        ret = Jacon_add_node_to_map(map, &node->childs[index], builder.items);
+        if (ret != JACON_OK) {
+            Ju_str_free(&builder);
+            return ret;
+        }
+    }
+    Ju_str_free(&builder);
+    return JACON_OK;    
+}
+
+Jacon_Error
 Jacon_build_content(Jacon_content* content)
 {
-    (void)content;
+    // TODO
+    content->entries = hm_create(10);
+    Jacon_add_node_to_map(&content->entries, content->root, NULL);
     return JACON_OK;
 }
 
 Jacon_Error
-Jacon_get_value_by_name(Jacon_content* content)
+Jacon_free_content(Jacon_content* content)
 {
-    (void)content;
+    if (content == NULL)
+        return JACON_ERR_NULL_PARAM;
+
+    hm_free(&content->entries);
+    Jacon_free_node(content->root);
     return JACON_OK;
+}
+
+Jacon_Error
+Jacon_get_value_by_name(Jacon_content* content, const char* name, Jacon_ValueType type, void* value)
+{
+    if (content == NULL || name == NULL || (value == NULL && type != JACON_VALUE_STRING)) {
+        return JACON_ERR_NULL_PARAM;
+    }
+    Jacon_Node* ptr = (Jacon_Node*)hm_get(&content->entries, name);
+    switch (type) {
+        case JACON_VALUE_STRING:
+            *(char**)value = strdup(ptr->value.string_val);
+            if (value == NULL) return JACON_ERR_MEMORY_ALLOCATION;
+            break;
+        case JACON_VALUE_INT:
+            *(int*)value = ptr->value.int_val;
+            break;
+        case JACON_VALUE_FLOAT:
+            *(float*)value = ptr->value.float_val;
+            break;
+        case JACON_VALUE_DOUBLE:
+            *(double*)value = ptr->value.double_val;
+            break;
+        case JACON_VALUE_BOOLEAN:
+            *(bool*)value = ptr->value.bool_val;
+            break;
+        case JACON_VALUE_NULL:
+        case JACON_VALUE_ARRAY:
+        case JACON_VALUE_OBJECT:
+        default:
+            return JACON_ERR_INVALID_VALUE_TYPE;
+    }
+    return JACON_OK;
+}
+
+Jacon_Error
+Jacon_get_string_by_name(Jacon_content* content, const char* name, char** value)
+{
+    return Jacon_get_value_by_name(content, name, JACON_VALUE_STRING, value);
+}
+
+Jacon_Error
+Jacon_get_int_by_name(Jacon_content* content, const char* name, int* value)
+{
+    return Jacon_get_value_by_name(content, name, JACON_VALUE_INT, value);
+}
+
+Jacon_Error
+Jacon_get_float_by_name(Jacon_content* content, const char* name, float* value)
+{
+    return Jacon_get_value_by_name(content, name, JACON_VALUE_FLOAT, value);
+}
+
+Jacon_Error
+Jacon_get_double_by_name(Jacon_content* content, const char* name, double* value)
+{
+    return Jacon_get_value_by_name(content, name, JACON_VALUE_DOUBLE, value);
+}
+
+Jacon_Error
+Jacon_get_bool_by_name(Jacon_content* content, const char* name, bool* value)
+{
+    return Jacon_get_value_by_name(content, name, JACON_VALUE_BOOLEAN, value);
 }
 
 /**
  * Get single value by type
+ * 
+ * Single value means that there is only this value in json content
  */
 Jacon_Error
 Jacon_get_value(Jacon_content* content, Jacon_ValueType type, void* value)
 {
-    if (content == NULL || value == NULL) 
+    if (content == NULL || (value == NULL && type != JACON_VALUE_STRING)) 
         return JACON_ERR_NULL_PARAM;
     switch (type) {
         case JACON_VALUE_STRING:
@@ -1105,9 +1226,6 @@ Jacon_get_value(Jacon_content* content, Jacon_ValueType type, void* value)
             *(bool*)value = content->root->value.bool_val;
             break;
         case JACON_VALUE_NULL:
-            // Who tf would use that
-            *(void**)value = NULL;
-            break;
         case JACON_VALUE_ARRAY:
         case JACON_VALUE_OBJECT:
         default:
@@ -1120,7 +1238,7 @@ Jacon_get_value(Jacon_content* content, Jacon_ValueType type, void* value)
  * Get single string value
  */
 Jacon_Error
-Jacon_get_string(Jacon_content* content, char* value)
+Jacon_get_string(Jacon_content* content, char** value)
 {
     return Jacon_get_value(content, JACON_VALUE_STRING, value);
 }
@@ -1161,97 +1279,128 @@ Jacon_get_bool(Jacon_content* content, bool* value)
     return Jacon_get_value(content, JACON_VALUE_BOOLEAN, value);
 }
 
-/**
- * Get single null value
- * 
- * This is insane wtf
- */
-Jacon_Error
-Jacon_get_null(Jacon_content* content, void* value)
+bool
+Jacon_exist_by_name(Jacon_content* content, const char* name, Jacon_ValueType type)
 {
-    return Jacon_get_value(content, JACON_VALUE_NULL, value);
-}
-
-Jacon_Error
-Jacon_value_exist_by_name(Jacon_content* content, const char* name, Jacon_ValueType type)
-{
-    (void)content;
-    StringBuilder builder = {0};
-    char* str_Value;
-    int ret = Jacon_value_type_to_str(type, &str_Value);
-    if (ret != JACON_OK) return ret;
-
-    Ju_str_append_null(&builder, "(", str_Value, ")", name);
-    Ju_str_free(&builder);
-    return JACON_OK;
-}
-
-/**
- * Verify the existence of a single value of given type
- */
-Jacon_Error
-Jacon_exist(Jacon_content* content, Jacon_ValueType type, bool* result)
-{
-    void* value = NULL;
-    int ret = Jacon_get_value(content, type, value);
-    if (ret != JACON_OK) return ret;
-    if (type == JACON_VALUE_NULL) *result = value == NULL;
-    else *result = value == NULL;
-    return JACON_OK;
+    void* value = hm_get(&content->entries, name);
+    return ((Jacon_Node*)value)->type == type;
 }
 
 /**
  * Verify the existence of a single string value
  */
 Jacon_Error
-Jacon_exist_string(Jacon_content* content, bool* result)
+Jacon_exist_string_by_name(Jacon_content* content, const char* name)
 {
-    return Jacon_exist(content, JACON_VALUE_STRING, result);
+    return Jacon_exist_by_name(content, name, JACON_VALUE_STRING);
 }
 
 /**
  * Verify the existence of a single int value
  */
 Jacon_Error
-Jacon_exist_int(Jacon_content* content, bool* result)
+Jacon_exist_int_by_name(Jacon_content* content, const char* name)
 {
-    return Jacon_exist(content, JACON_VALUE_INT, result);
+    return Jacon_exist_by_name(content, name, JACON_VALUE_INT);
 }
 
 /**
  * Verify the existence of a single float value
  */
 Jacon_Error
-Jacon_exist_float(Jacon_content* content, bool* result)
+Jacon_exist_float_by_name(Jacon_content* content, const char* name)
 {
-    return Jacon_exist(content, JACON_VALUE_FLOAT, result);
+    return Jacon_exist_by_name(content, name, JACON_VALUE_FLOAT);
 }
 
 /**
  * Verify the existence of a single double value
  */
 Jacon_Error
-Jacon_exist_double(Jacon_content* content, bool* result)
+Jacon_exist_double_by_name(Jacon_content* content, const char* name)
 {
-    return Jacon_exist(content, JACON_VALUE_DOUBLE, result);
+    return Jacon_exist_by_name(content, name, JACON_VALUE_DOUBLE);
 }
 
 /**
  * Verify the existence of a single boolean value
  */
 Jacon_Error
-Jacon_exist_bool(Jacon_content* content, bool* result)
+Jacon_exist_bool_by_name(Jacon_content* content, const char* name)
 {
-    return Jacon_exist(content, JACON_VALUE_BOOLEAN, result);
+    return Jacon_exist_by_name(content, name, JACON_VALUE_BOOLEAN);
 }
 
 /**
  * Verify the existence of a single null value
  */
 Jacon_Error
-Jacon_exist_null(Jacon_content* content, bool* result)
+Jacon_exist_null_by_name(Jacon_content* content, const char* name)
 {
-    return Jacon_exist(content, JACON_VALUE_NULL, result);
+    return Jacon_exist_by_name(content, name, JACON_VALUE_NULL);
+}
+
+/**
+ * Verify the existence of a single value of given type
+ */
+bool
+Jacon_exist(Jacon_content* content, Jacon_ValueType type)
+{
+    return content->root->type == type;
+}
+
+/**
+ * Verify the existence of a single string value
+ */
+Jacon_Error
+Jacon_exist_string(Jacon_content* content)
+{
+    return Jacon_exist(content, JACON_VALUE_STRING);
+}
+
+/**
+ * Verify the existence of a single int value
+ */
+Jacon_Error
+Jacon_exist_int(Jacon_content* content)
+{
+    return Jacon_exist(content, JACON_VALUE_INT);
+}
+
+/**
+ * Verify the existence of a single float value
+ */
+Jacon_Error
+Jacon_exist_float(Jacon_content* content)
+{
+    return Jacon_exist(content, JACON_VALUE_FLOAT);
+}
+
+/**
+ * Verify the existence of a single double value
+ */
+Jacon_Error
+Jacon_exist_double(Jacon_content* content)
+{
+    return Jacon_exist(content, JACON_VALUE_DOUBLE);
+}
+
+/**
+ * Verify the existence of a single boolean value
+ */
+Jacon_Error
+Jacon_exist_bool(Jacon_content* content)
+{
+    return Jacon_exist(content, JACON_VALUE_BOOLEAN);
+}
+
+/**
+ * Verify the existence of a single null value
+ */
+Jacon_Error
+Jacon_exist_null(Jacon_content* content)
+{
+    return Jacon_exist(content, JACON_VALUE_NULL);
 }
 
 /**
@@ -1297,6 +1446,9 @@ Jacon_parse_input(Jacon_content* content, const char* str)
         return ret;
     }
     Jacon_free_tokenizer(&tokenizer);
+
+    ret = Jacon_build_content(content);
+    if (ret != JACON_OK) return ret;
 
     return JACON_OK;
 }

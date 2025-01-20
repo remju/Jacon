@@ -2,3 +2,5 @@ jacon
 .vscode
 JSONTestSuite
 logs
+TODO.md
+.gdb_history
