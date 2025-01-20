@@ -596,28 +596,21 @@ Jacon_parse_token(Jacon_Token* token, const char** str)
                     break;
                 }
 
-                // Parse a double and check for float cast
                 double dval = strtod(*str, &endptr);
+    
+                // Ensure the number is followed by valid JSON characters
                 if (!isspace(*endptr) && *endptr != ',' && *endptr != ']' && *endptr != '}' && *endptr != '\0') {
                     return JACON_ERR_INVALID_JSON;
                 }
-
+                
                 float fval = (float)dval;
                 double recast = (double)fval;
-
-                printf("Float value: %f, Recast double value: %f\n", fval, recast);
-
-                // If casted value lost precision -> stay a double, otherwise can fit in a float
-                if (fabs(dval - recast) > FLT_EPSILON || fabs(dval) > FLT_MAX) {
-                    // If precision is lost or out of float range, store as double
+                if (dval > recast) {
                     token->type = JACON_TOKEN_DOUBLE;
                     token->double_val = dval;
-                    printf("Stored as double: %.17g\n", dval);
                 } else {
-                    // Otherwise, store as float
                     token->type = JACON_TOKEN_FLOAT;
                     token->float_val = fval;
-                    printf("Stored as float: %.7g\n", fval);
                 }
 
                 *str = endptr;
