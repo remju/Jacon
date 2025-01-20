@@ -33,7 +33,7 @@ hm_create(size_t size);
  *  - NULL if the key is not present, or the map is is NULL allocated
  */
 void*
-hm_get(HashMap* map, char* key);
+hm_get(HashMap* map, const char* key);
 
 /**
  * Put the key, value pair in the hashmap
@@ -42,7 +42,7 @@ hm_get(HashMap* map, char* key);
  *  - -1 if the map is NULL allocated
  */
 int
-hm_put(HashMap* map, char* key, void* value);
+hm_put(HashMap* map, const char* key, void* value);
 
 /**
  * Remove a key, value pair from the hashtable
@@ -51,7 +51,7 @@ hm_put(HashMap* map, char* key, void* value);
  *  - NULL if the key is not present, or the map is is NULL allocated
  */
 void*
-hm_remove(HashMap* map, char* key);
+hm_remove(HashMap* map, const char* key);
 
 /**
  * Free the memory allocated for the map
@@ -148,7 +148,7 @@ hm_resize(HashMap* map)
 }
 
 void*
-hm_get(HashMap* map, char* key)
+hm_get(HashMap* map, const char* key)
 {
     if(map == NULL) {
         return NULL;
@@ -169,7 +169,7 @@ hm_get(HashMap* map, char* key)
 }
 
 int
-hm_put(HashMap* map, char* key, void* value)
+hm_put(HashMap* map, const char* key, void* value)
 {
     if(map == NULL) {
         return -1;
@@ -215,7 +215,7 @@ hm_put(HashMap* map, char* key, void* value)
 }
 
 void*
-hm_remove(HashMap* map, char* key){
+hm_remove(HashMap* map, const char* key){
     if(map == NULL) {
         return NULL;
     }
@@ -245,6 +245,16 @@ hm_remove(HashMap* map, char* key){
     return NULL;
 }
 
+void
+hm_free_entry(HashMapEntry* entry)
+{
+    if (entry == NULL) {
+        return;
+    }
+    free(entry->key);
+    free(entry);
+}
+
 void 
 hm_free(HashMap* map) 
 {
@@ -254,10 +264,7 @@ hm_free(HashMap* map)
         HashMapEntry* entry = map->entries[i];
         if (entry != NULL) {
             HashMapEntry* next = entry->next_entry;
-            free(entry->key);
-            entry->key = NULL;
-            free(entry);
-            entry = NULL;
+            hm_free_entry(entry);
             entry = next;
         }
     }

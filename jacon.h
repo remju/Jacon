@@ -361,9 +361,8 @@ Jacon_free_node(Jacon_Node* node)
     if (node->name != NULL) {
         free(node->name);
     }
-    if (node->type == JACON_VALUE_STRING) {
+    if (node->type == JACON_VALUE_STRING && node->value.string_val != NULL) {
         free(node->value.string_val);
-        return;
     }
     if (node->type == JACON_VALUE_ARRAY || node->type == JACON_VALUE_OBJECT) {
         for (size_t i = 0; i < node->child_count; i++)
@@ -1071,50 +1070,49 @@ Jacon_parse_tokens(Jacon_Node* root, Jacon_Tokenizer* tokenizer)
 }
 
 Jacon_Error
-Jacon_add_node_to_map(HashMap* map, Jacon_Node* node, StringBuilder path_to_node)
+Jacon_add_node_to_map(HashMap* map, Jacon_Node* node, const char* path_to_node)
 {
     if (map == NULL || node == NULL)
         return JACON_ERR_NULL_PARAM;
 
+    if (node->type == JACON_VALUE_OBJECT && node->child_count == 0) {
+        // No need to add to map since there are no values in the object
+        return JACON_OK;
+    }
+
     int ret;
 
-    char* str_value;
-    ret = Jacon_value_type_to_str(node->type, &str_value);
-    if (ret != JACON_OK) return ret;
+    StringBuilder builder = {0};
+    Ju_str_append_null(&builder, path_to_node);
+    Ju_str_append_null(&builder, node->name);
 
-    // Append node name to current path
-    printf("Node name: %s\n", node->name);
-    if (node->name != NULL)
-        Ju_str_append_null(&path_to_node, node->name);
-    
     // If node type is object we do not add yet
     // It will be added when we arrive at the final value
     // We will not allow retrieving a full object
     // Only retriving a single value is allowed for now
     // Single value won't change
     // Full object is subject to change if it appears to be needed
-    if (node->type != JACON_VALUE_OBJECT)
-        hm_put(map, path_to_node.items, node);
+    if (node->type != JACON_VALUE_OBJECT) {
+        hm_put(map, builder.items, node);
+        Ju_str_free(&builder);
+        return JACON_OK;
+    }
 
     // Add a dot between current path and next name
     // Next name will be appended in next recursive fn call and so on
-    if (node->name != NULL && node->type == JACON_VALUE_OBJECT)
-        Ju_str_append_null(&path_to_node, ".");
-
+    if (node->name != NULL) {
+        Ju_str_append_null(&builder, ".");
+    }
 
     for (size_t index = 0; index < node->child_count; index++)
     {
-        StringBuilder child_path = {0};
-        if (path_to_node.count > 0) {
-            child_path.items = strdup(path_to_node.items);
-            if (child_path.items == NULL)
-                return JACON_ERR_MEMORY_ALLOCATION;
-            child_path.count = path_to_node.count;
-            child_path.capacity = path_to_node.capacity;
+        ret = Jacon_add_node_to_map(map, &node->childs[index], builder.items);
+        if (ret != JACON_OK) {
+            Ju_str_free(&builder);
+            return ret;
         }
-        ret = Jacon_add_node_to_map(map, &node->childs[index], child_path);
-        Ju_str_free(&child_path);
     }
+    Ju_str_free(&builder);
     return JACON_OK;    
 }
 
@@ -1123,9 +1121,7 @@ Jacon_build_content(Jacon_content* content)
 {
     // TODO
     content->entries = hm_create(10);
-    StringBuilder builder = {0};
-    Jacon_add_node_to_map(&content->entries, content->root, builder);
-    Ju_str_free(&builder);
+    Jacon_add_node_to_map(&content->entries, content->root, NULL);
     return JACON_OK;
 }
 
@@ -1244,13 +1240,8 @@ Jacon_Error
 Jacon_value_exist_by_name(Jacon_content* content, const char* name, Jacon_ValueType type)
 {
     (void)content;
-    StringBuilder builder = {0};
-    char* str_Value;
-    int ret = Jacon_value_type_to_str(type, &str_Value);
-    if (ret != JACON_OK) return ret;
-
-    Ju_str_append_null(&builder, "(", str_Value, ")", name);
-    Ju_str_free(&builder);
+    (void)name;
+    (void)type;
     return JACON_OK;
 }
 
