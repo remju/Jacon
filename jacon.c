@@ -126,9 +126,12 @@ main(int argc, const char** argv)
     char* string;
     Jacon_get_string_by_name(&content, "string", &string);
     puts(string);
-    char* nested_str;
-    Jacon_get_string_by_name(&content, "nestedobject.nestedProperty.innerProperty", &nested_str);
-    puts(nested_str);
+    bool tb;
+    Jacon_get_bool_by_name(&content, "truebool", &tb);
+    printf("%s\n", tb ? "true" : "false");
+    bool fb;
+    Jacon_get_bool_by_name(&content, "falsebool", &fb);
+    printf("%s\n", fb ? "true" : "false");
     int i;
     Jacon_get_int_by_name(&content, "int", &i);
     printf("%d\n", i);
@@ -137,13 +140,13 @@ main(int argc, const char** argv)
     printf("%f\n", f);
     double d;
     Jacon_get_double_by_name(&content, "double", &d);
-    printf("%f\n", d);
-    bool tb;
-    Jacon_get_bool_by_name(&content, "truebool", &tb);
-    printf("%d\n", tb);
-    bool fb;
-    Jacon_get_bool_by_name(&content, "falsebool", &fb);
-    printf("%d\n", fb);
+    printf("%.15f\n", d);
+    char* object;
+    Jacon_get_string_by_name(&content, "object.property", &object);
+    puts(object);
+    char* nested_str;
+    Jacon_get_string_by_name(&content, "nestedobject.nestedProperty.innerProperty", &nested_str);
+    puts(nested_str);
     
     free(json_str);
     close(fd);

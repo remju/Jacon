@@ -1155,7 +1155,6 @@ Jacon_get_value_by_name(Jacon_content* content, const char* name, Jacon_ValueTyp
             break;
         case JACON_VALUE_DOUBLE:
             *(double*)value = ptr->value.double_val;
-            printf("%f\n", ptr->value.double_val);
             break;
         case JACON_VALUE_BOOLEAN:
             *(bool*)value = ptr->value.bool_val;
@@ -1428,8 +1427,6 @@ Jacon_parse_input(Jacon_content* content, const char* str)
         Jacon_free_tokenizer(&tokenizer);
         return ret;
     }
-
-    Jacon_print_tokenizer(&tokenizer);
     
     // Invalidate empty input
     if (tokenizer.count == 0) {
