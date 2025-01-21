@@ -24,10 +24,10 @@ CANPASSORFAIL_FILES=$(shell find $(LOCAL_REPO_DIR)/test_parsing/i_*.json)  # Mig
 
 all: $(TARGET)
 
-jacon: jacon.c jacon.h jutils.h data_structures.h
+jacon: jacon.c jacon.h
 	$(CC) $(CFLAGS) -o $(TARGET) jacon.c
 
-test: test.c jacon.h jutils.h data_structures.h
+test: test.c jacon.h
 	$(CC) $(CFLAGS) -o $(TEST_TARGET) test.c
 	./$(TEST_TARGET)
 

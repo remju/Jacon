@@ -1,14 +1,8 @@
 #ifndef JACON_H
 #define JACON_H
 
-#include "data_structures.h"
 #include <stddef.h>
 #include <stdbool.h>
-
-#define JACON_TOKENIZER_DEFAULT_CAPACITY 256
-#define JACON_TOKENIZER_DEFAULT_RESIZE_FACTOR 2
-#define JACON_NODE_DEFAULT_CHILD_CAPACITY 1
-#define JACON_NODE_DEFAULT_RESIZE_FACTOR 2
 
 // Error codes
 typedef enum {
@@ -23,8 +17,77 @@ typedef enum {
     JACON_ERR_INVALID_ESCAPE_SEQUENCE,
     JACON_ERR_CHAR_NOT_FOUND,
     JACON_ERR_MEMORY_ALLOCATION,
+    JACON_ERR_INVALID_SIZE,
     JACON_ERR_UNREACHABLE_STATEMENT,
 } Jacon_Error;
+
+typedef struct Jacon_StringBuilder Jacon_StringBuilder;
+
+struct Jacon_StringBuilder {
+    char* string;
+    size_t count;
+    size_t capacity;
+};
+
+#define JACON_MAP_DEFAULT_SIZE 10
+#define JACON_MAP_RESIZE_FACTOR 2
+typedef struct Jacon_HashMap Jacon_HashMap;
+typedef struct Jacon_HashMapEntry Jacon_HashMapEntry;
+
+struct Jacon_HashMapEntry {
+    char* key;
+    void* value;
+    // Next entry in the linked list, 
+    // NULL by default or if last entry in list
+    Jacon_HashMapEntry* next_entry;
+};
+
+struct Jacon_HashMap {
+    size_t size;
+    size_t entries_count;
+    Jacon_HashMapEntry** entries;
+};
+
+Jacon_Error
+Jacon_hm_create(Jacon_HashMap** map, size_t size);
+
+/**
+ * Get value for a specific key
+ * Returns 
+ *  - The stored value associated to the key
+ *  - NULL if the key is not present, or the map is is NULL allocated
+ */
+void*
+Jacon_hm_get(Jacon_HashMap* map, const char* key);
+
+/**
+ * Put the key, value pair in the hashmap
+ * Returns
+ *  - 0 if the key, value pair was successfully added
+ *  - -1 if the map is NULL allocated
+ */
+Jacon_Error
+Jacon_hm_put(Jacon_HashMap* map, const char* key, void* value);
+
+/**
+ * Remove a key, value pair from the hashtable
+ * Returns 
+ *  - The removed value associated to the key
+ *  - NULL if the key is not present, or the map is is NULL allocated
+ */
+void*
+Jacon_hm_remove(Jacon_HashMap* map, const char* key);
+
+/**
+ * Free the memory allocated for the map
+ */
+void
+Jacon_hm_free(Jacon_HashMap* map);
+
+#define JACON_TOKENIZER_DEFAULT_CAPACITY 256
+#define JACON_TOKENIZER_DEFAULT_RESIZE_FACTOR 2
+#define JACON_NODE_DEFAULT_CHILD_CAPACITY 1
+#define JACON_NODE_DEFAULT_RESIZE_FACTOR 2
 
 // Value types
 typedef enum {
@@ -64,7 +127,7 @@ struct Jacon_Node {
 typedef struct Jacon_content {
     Jacon_Node* root;
     // Dictionary for efficient value retrieving
-    HashMap entries;
+    Jacon_HashMap* entries;
 } Jacon_content;
 
 // Tokenizer
@@ -129,19 +192,267 @@ Jacon_value_type_to_str(Jacon_ValueType type, char** str);
 
 #ifdef JACON_IMPLEMENTATION
 
-// Used for hashmaps
-#define DATA_STRUCTURES_IMPLEMENTATION
-#include "data_structures.h"
-
-// Used for string builder utility, and possibly logging if needed
-#define JUTILS_IMPLEMENTATION
-#include "jutils.h"
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <float.h>
 #include <math.h>
 #include <limits.h>
 #include <ctype.h>
+#include <stdarg.h>
+
+#define Jacon_str_append_null(builder, ...) Jacon_str_append(builder, __VA_ARGS__, NULL)
+
+Jacon_Error 
+Jacon_str_append(Jacon_StringBuilder* builder, ...) 
+{
+    if (builder == NULL) {
+        return JACON_ERR_NULL_PARAM;
+    }
+    va_list args;
+    va_start(args, builder);
+
+    const char* arg = va_arg(args, const char*);
+    while (arg != NULL) 
+    {
+        size_t size = strlen(arg);
+        if (size > 0) {
+            if (builder->count + size + 1 > builder->capacity)
+            {
+                size_t new_capacity = builder->count + size + 1;
+                builder->string = realloc(builder->string, new_capacity * sizeof(char));
+                if (builder->string == NULL) return JACON_ERR_MEMORY_ALLOCATION;
+                builder->capacity = new_capacity;
+            }
+            strncpy(builder->string + builder->count, arg, size);
+            builder->count += size;
+            builder->string[builder->count] = '\0';
+        }
+        arg = va_arg(args, const char*);
+    }
+
+    va_end(args);
+    return JACON_OK;
+}
+
+void
+Jacon_str_free(Jacon_StringBuilder *builder)
+{
+    if (builder->string != NULL) 
+    {
+        free(builder->string);
+        builder->string = NULL;
+    }
+}
+
+/**
+ * djb2 algorithm
+ * source: https://www.cse.yorku.ca/~oz/hash.html
+ */
+unsigned long
+Jacon_hash(unsigned char *str)
+{
+    unsigned long hash = 5381;
+    int c;
+
+    while ((c = *str++))
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+    return hash;
+}
+
+/**
+ * Create a new entry with the key, value pair
+ */
+Jacon_HashMapEntry*
+Jacon_create_entry(const char* key, void* value)
+{
+    Jacon_HashMapEntry* entry = malloc(sizeof(Jacon_HashMapEntry));
+    if (entry == NULL) {
+        return NULL;
+    }
+    entry->key = strdup(key);
+    if (entry->key == NULL) {
+        free(entry);
+        return NULL;
+    }
+    entry->value = value;
+    entry->next_entry = NULL;
+    return entry;
+}
+
+Jacon_Error
+Jacon_hm_create(Jacon_HashMap** map, size_t init_size)
+{
+    if (init_size == 0) {
+        return JACON_ERR_INVALID_SIZE;
+    }
+    *map = malloc(sizeof(Jacon_HashMap));
+    if (*map == NULL) {
+        return JACON_ERR_MEMORY_ALLOCATION;
+    }
+    (*map)->size = init_size;
+    (*map)->entries_count = 0;
+    (*map)->entries = calloc(init_size, sizeof(Jacon_HashMapEntry*));
+    if ((*map)->entries == NULL) {
+        free(*map);
+        return JACON_ERR_MEMORY_ALLOCATION;
+    }
+    return JACON_OK;
+}
+
+Jacon_Error
+Jacon_hm_resize(Jacon_HashMap* map)
+{
+    Jacon_HashMap tmp = {0};
+    tmp.size = map->size * JACON_MAP_RESIZE_FACTOR;
+    tmp.entries = calloc(tmp.size, sizeof(Jacon_HashMapEntry));
+    if(tmp.entries == NULL) {
+        return -1;
+    }
+
+    for(size_t i = 0; i < map->size; i++) {
+        if(map->entries[i] != NULL) {
+            Jacon_hm_put(&tmp, map->entries[i]->key, map->entries[i]->value);
+            Jacon_HashMapEntry* entry = map->entries[i]->next_entry;
+            while(entry != NULL) {
+                Jacon_hm_put(&tmp, entry->key, entry->value);
+                entry = entry->next_entry;
+            }
+        }
+    }
+    Jacon_hm_free(map);
+    *map = tmp;
+    return 0;
+}
+
+void*
+Jacon_hm_get(Jacon_HashMap* map, const char* key)
+{
+    if(map == NULL) {
+        return NULL;
+    }
+
+    unsigned long hashcode = Jacon_hash((unsigned char*)key);
+    size_t index = hashcode % map->size;
+
+    Jacon_HashMapEntry* current = map->entries[index];
+    while (current != NULL) {
+        if (strcmp(current->key, key) == 0) {
+            return current->value;
+        }
+        current = current->next_entry;
+    }
+
+    return NULL;
+}
+
+Jacon_Error
+Jacon_hm_put(Jacon_HashMap* map, const char* key, void* value)
+{
+    if(map == NULL) {
+        return -1;
+    }
+    if(key == NULL) {
+        return -1;
+    }
+
+    int ret;
+    // Resize if map is full
+    // Subject to change to partially full (75%)
+    if(map->size == map->entries_count) {
+        ret = Jacon_hm_resize(map);
+        if (ret != JACON_OK) return ret;
+    }
+
+    // Hashcode and bucket index
+    unsigned long hashcode = Jacon_hash((unsigned char*)key);
+    size_t index = hashcode % map->size;
+
+    Jacon_HashMapEntry* new_entry = Jacon_create_entry(key, value);
+    if (new_entry == NULL) {
+        return JACON_ERR_MEMORY_ALLOCATION;
+    }
+
+    if(map->entries[index] == NULL) { // Empty bucket
+        map->entries[index] = new_entry;
+    }
+    else { // Full bucket
+        Jacon_HashMapEntry* current = map->entries[index];
+        while (current != NULL) {
+            if (strcmp(current->key, key) == 0) {
+                // Replace value if same key
+                current->value = value;
+                free(new_entry->key);
+                free(new_entry);
+                return 0;
+            }
+            current = current->next_entry;
+        }
+        new_entry->next_entry = map->entries[index];
+        map->entries[index] = new_entry;
+    }
+    map->entries_count++;
+    return 0;
+}
+
+void*
+Jacon_hm_remove(Jacon_HashMap* map, const char* key){
+    if(map == NULL) {
+        return NULL;
+    }
+
+    unsigned long hashcode = Jacon_hash((unsigned char*)key);
+    size_t index = hashcode % map->size;
+
+    Jacon_HashMapEntry* current = map->entries[index];
+    Jacon_HashMapEntry* prev = NULL;
+    while (current != NULL) {
+        if (strcmp(current->key, key) == 0) {
+            void* value = current->value;
+            if (prev == NULL) {
+                map->entries[index] = current->next_entry;
+            } else {
+                prev->next_entry = current->next_entry;
+            }
+            free(current->key);
+            free(current);
+            map->entries_count--;
+            return value;
+        }
+        prev = current;
+        current = current->next_entry;
+    }
+
+    return NULL;
+}
+
+void
+Jacon_hm_free_entry(Jacon_HashMapEntry* entry)
+{
+    if (entry == NULL) {
+        return;
+    }
+    free(entry->key);
+    free(entry);
+}
+
+void 
+Jacon_hm_free(Jacon_HashMap* map) 
+{
+    if (map == NULL || map->entries == NULL)
+        return;
+    for (size_t i = 0; i < map->size; i++) {
+        Jacon_HashMapEntry* entry = map->entries[i];
+        if (entry != NULL) {
+            Jacon_HashMapEntry* next = entry->next_entry;
+            Jacon_hm_free_entry(entry);
+            entry = next;
+        }
+    }
+    free(map->entries);
+    map->entries = NULL;
+}
 
 // Debug print token
 void 
@@ -282,40 +593,6 @@ Jacon_print_node(Jacon_Node* node, int indent)
             Jacon_print_node_value(node->value, node->type);
             break;
     }
-}
-
-Jacon_Error
-Jacon_value_type_to_str(Jacon_ValueType type, char** str)
-{
-    switch (type) {
-        case JACON_VALUE_STRING:
-            *str = "string";
-            break;
-        case JACON_VALUE_INT:
-            *str = "int";
-            break;
-        case JACON_VALUE_FLOAT:
-            *str = "float";
-            break;
-        case JACON_VALUE_DOUBLE:
-            *str = "double";
-            break;
-        case JACON_VALUE_BOOLEAN:
-            *str = "boolean";
-            break;
-        case JACON_VALUE_NULL:
-            *str = "null";
-            break;
-        case JACON_VALUE_ARRAY:
-            *str = "array";
-            break;
-        case JACON_VALUE_OBJECT:
-            *str = "object";
-            break;
-        default:
-            return JACON_ERR_INVALID_VALUE_TYPE;
-    }
-    return JACON_OK;
 }
 
 Jacon_Error
@@ -1069,7 +1346,7 @@ Jacon_parse_tokens(Jacon_Node* root, Jacon_Tokenizer* tokenizer)
 }
 
 Jacon_Error
-Jacon_add_node_to_map(HashMap* map, Jacon_Node* node, const char* path_to_node)
+Jacon_add_node_to_map(Jacon_HashMap* map, Jacon_Node* node, const char* path_to_node)
 {
     if (map == NULL || node == NULL)
         return JACON_ERR_NULL_PARAM;
@@ -1081,10 +1358,17 @@ Jacon_add_node_to_map(HashMap* map, Jacon_Node* node, const char* path_to_node)
 
     int ret;
 
-    StringBuilder builder = {0};
-    Ju_str_append_null(&builder, path_to_node);
-    Ju_str_append_null(&builder, node->name);
-
+    Jacon_StringBuilder builder = {0};
+    ret = Jacon_str_append_null(&builder, path_to_node);
+    if (ret != JACON_OK) {
+        Jacon_str_free(&builder);
+        return ret;
+    }
+    ret = Jacon_str_append_null(&builder, node->name);
+    if (ret != JACON_OK) {
+        Jacon_str_free(&builder);
+        return ret;
+    }
     // If node type is object we do not add yet
     // It will be added when we arrive at the final value
     // We will not allow retrieving a full object
@@ -1092,26 +1376,30 @@ Jacon_add_node_to_map(HashMap* map, Jacon_Node* node, const char* path_to_node)
     // Single value won't change
     // Full object is subject to change if it appears to be needed
     if (node->type != JACON_VALUE_OBJECT) {
-        hm_put(map, builder.items, node);
-        Ju_str_free(&builder);
+        Jacon_hm_put(map, builder.string, node);
+        Jacon_str_free(&builder);
         return JACON_OK;
     }
 
     // Add a dot between current path and next name
     // Next name will be appended in next recursive fn call and so on
     if (node->name != NULL) {
-        Ju_str_append_null(&builder, ".");
+        ret = Jacon_str_append_null(&builder, ".");
+        if (ret != JACON_OK) {
+            Jacon_str_free(&builder);
+            return ret;
+        }
     }
 
     for (size_t index = 0; index < node->child_count; index++)
     {
-        ret = Jacon_add_node_to_map(map, &node->childs[index], builder.items);
+        ret = Jacon_add_node_to_map(map, &node->childs[index], builder.string);
         if (ret != JACON_OK) {
-            Ju_str_free(&builder);
+            Jacon_str_free(&builder);
             return ret;
         }
     }
-    Ju_str_free(&builder);
+    Jacon_str_free(&builder);
     return JACON_OK;    
 }
 
@@ -1119,9 +1407,10 @@ Jacon_Error
 Jacon_build_content(Jacon_content* content)
 {
     // TODO
-    content->entries = hm_create(10);
-    Jacon_add_node_to_map(&content->entries, content->root, NULL);
-    return JACON_OK;
+    int ret;
+    ret = Jacon_hm_create(&content->entries, 10);
+    if (ret != JACON_OK) return ret;
+    return Jacon_add_node_to_map(content->entries, content->root, NULL);
 }
 
 Jacon_Error
@@ -1130,7 +1419,7 @@ Jacon_free_content(Jacon_content* content)
     if (content == NULL)
         return JACON_ERR_NULL_PARAM;
 
-    hm_free(&content->entries);
+    Jacon_hm_free(content->entries);
     Jacon_free_node(content->root);
     return JACON_OK;
 }
@@ -1141,7 +1430,7 @@ Jacon_get_value_by_name(Jacon_content* content, const char* name, Jacon_ValueTyp
     if (content == NULL || name == NULL || (value == NULL && type != JACON_VALUE_STRING)) {
         return JACON_ERR_NULL_PARAM;
     }
-    Jacon_Node* ptr = (Jacon_Node*)hm_get(&content->entries, name);
+    Jacon_Node* ptr = (Jacon_Node*)Jacon_hm_get(content->entries, name);
     switch (type) {
         case JACON_VALUE_STRING:
             *(char**)value = strdup(ptr->value.string_val);
@@ -1282,7 +1571,7 @@ Jacon_get_bool(Jacon_content* content, bool* value)
 bool
 Jacon_exist_by_name(Jacon_content* content, const char* name, Jacon_ValueType type)
 {
-    void* value = hm_get(&content->entries, name);
+    void* value = Jacon_hm_get(content->entries, name);
     return ((Jacon_Node*)value)->type == type;
 }
 

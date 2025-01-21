@@ -41,6 +41,9 @@ print_error(Jacon_Error error)
         case JACON_ERR_EMPTY_INPUT:
             puts("Jacon error: JACON_ERR_EMPTY_INPUT");
             break;
+        case JACON_ERR_INVALID_SIZE:
+            puts("Jacon error: JACON_ERR_INVALID_SIZE");
+            break;
         case JACON_END_OF_INPUT:
         case JACON_OK:
         default:
