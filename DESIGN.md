@@ -1,3 +1,6 @@
+# Outdated
+This document was used for starting the project and is no longer up to date. 
+
 # Needs
 Parsing a string into a struct than i can go through an get values associated to keys using C
 
