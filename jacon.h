@@ -18,6 +18,7 @@ typedef enum {
     JACON_ERR_CHAR_NOT_FOUND,
     JACON_ERR_MEMORY_ALLOCATION,
     JACON_ERR_INVALID_SIZE,
+    JACON_ERR_APPEND_FSTRING,
     JACON_ERR_UNREACHABLE_STATEMENT,
 } Jacon_Error;
 
@@ -180,7 +181,13 @@ Jacon_validate_input(Jacon_Tokenizer* tokenizer);
  * Parse a Json string input into a queryable object
  */
 Jacon_Error
-Jacon_parse_input(Jacon_content* content, const char* str);
+Jacon_deserialize(Jacon_content* content, const char* str);
+
+/**
+ * Parse a node into its Json representation
+ */
+Jacon_Error
+Jacon_serialize(Jacon_Node* node, char** str);
 
 /**
  * Duplicate a node
@@ -208,6 +215,7 @@ Jacon_free_node(Jacon_Node* node);
 #include <stdarg.h>
 
 #define Jacon_str_append_null(builder, ...) Jacon_str_append(builder, __VA_ARGS__, NULL)
+#define Jacon_str_append_fmt_null(builder, ...) Jacon_str_append_fmt(builder, __VA_ARGS__, NULL)
 
 Jacon_Error 
 Jacon_str_append(Jacon_StringBuilder* builder, ...) 
@@ -226,7 +234,7 @@ Jacon_str_append(Jacon_StringBuilder* builder, ...)
             if (builder->count + size + 1 > builder->capacity)
             {
                 size_t new_capacity = builder->count + size + 1;
-                builder->string = realloc(builder->string, new_capacity * sizeof(char));
+                builder->string = realloc(builder->string, new_capacity);
                 if (builder->string == NULL) return JACON_ERR_MEMORY_ALLOCATION;
                 builder->capacity = new_capacity;
             }
@@ -240,6 +248,46 @@ Jacon_str_append(Jacon_StringBuilder* builder, ...)
     va_end(args);
     return JACON_OK;
 }
+
+Jacon_Error 
+Jacon_str_append_fmt(Jacon_StringBuilder* builder, const char* fmt, ...)
+{
+    if (builder == NULL) {
+        return JACON_ERR_NULL_PARAM;
+    }
+    int n;
+    size_t size = 0;
+    va_list args;
+    va_start(args, fmt);
+    n = vsnprintf(NULL, size, fmt, args);
+    va_end(args);
+    
+    if (n < 0)
+        return JACON_ERR_APPEND_FSTRING;
+
+    size = (size_t) n + 1;
+    if (builder->capacity < builder->count + size) {
+        size_t new_capacity = builder->count + size;
+        char* tmp = realloc(builder->string, new_capacity);
+        if (tmp == NULL) {
+            return JACON_ERR_MEMORY_ALLOCATION;
+        }
+        builder->string = tmp;
+        builder->capacity = new_capacity;
+    }
+
+    va_start(args, fmt);
+    vsnprintf(builder->string + builder->count, size, fmt, args);
+    va_end(args);
+
+    builder->count += size - 1;
+
+    if (n < 0) {
+        return JACON_ERR_MEMORY_ALLOCATION;
+    }
+
+    return JACON_OK;
+} 
 
 void
 Jacon_str_free(Jacon_StringBuilder *builder)
@@ -1787,17 +1835,113 @@ Jacon_exist_null(Jacon_content* content)
     return Jacon_exist(content, JACON_VALUE_NULL);
 }
 
+Jacon_Error
+Jacon_append_offset(Jacon_StringBuilder* builder, size_t offset)
+{
+    for (size_t i = 0; i < offset; i++)
+    {
+        Jacon_str_append_null(builder, "  ");
+    }
+    return JACON_OK;
+}
+
 /**
- * Parse a Jacon node into a valid json string
+ * Get the string representation of a node
  */
 Jacon_Error
-Jacon_parse_object()
+Jacon_node_as_str(Jacon_Node* node, Jacon_StringBuilder* builder, size_t offset, bool putoffset)
 {
+    int ret;
+    size_t index;
+
+    if (putoffset)
+        Jacon_append_offset(builder, offset);
+
+    if (node->name != NULL) {
+        Jacon_str_append_null(builder, "\"", node->name, "\": ");
+    }
+    
+    switch (node->type) {
+        case JACON_VALUE_OBJECT:
+            Jacon_str_append_null(builder, "{");
+            if (node->child_count > 0) Jacon_str_append_null(builder, "\n");
+            index = 0;
+            while (index < node->child_count) {
+                ret = Jacon_node_as_str(node->childs[index], builder, offset + 1, true);
+                if (ret != JACON_OK) return ret;
+                if (++index < node->child_count) Jacon_str_append_null(builder, ",\n");
+            }
+
+            if (node->child_count > 0) {
+                Jacon_str_append_null(builder, "\n");
+                Jacon_append_offset(builder, offset);
+            }
+            Jacon_str_append_null(builder, "}");
+            break;
+        case JACON_VALUE_ARRAY:
+            Jacon_str_append_null(builder, "[");
+            if (node->child_count > 0) {
+                Jacon_str_append_null(builder, "\n");
+                Jacon_append_offset(builder, offset + 1);
+            }
+
+            index = 0;
+            while (index < node->child_count) {
+                ret = Jacon_node_as_str(node->childs[index], builder, offset + 1, false);
+                if (ret != JACON_OK) return ret;
+                if (++index < node->child_count) Jacon_str_append_null(builder, ", ");
+            }
+
+            if (node->child_count > 0) {
+                Jacon_str_append_null(builder, "\n");
+                Jacon_append_offset(builder, offset);
+            }
+            Jacon_str_append_null(builder, "]");
+            break;
+        case JACON_VALUE_STRING:
+            if (node->value.string_val == NULL) return JACON_ERR_NULL_PARAM;
+            Jacon_str_append_fmt_null(builder, "\"%s\"", node->value.string_val);
+            break;
+        case JACON_VALUE_INT:
+            Jacon_str_append_fmt_null(builder, "%d", node->value.int_val);
+            break;
+        case JACON_VALUE_FLOAT:
+            Jacon_str_append_fmt_null(builder, "%f", node->value.float_val);
+            break;
+        case JACON_VALUE_DOUBLE:
+            Jacon_str_append_fmt_null(builder, "%f", node->value.double_val);
+            break;
+        case JACON_VALUE_BOOLEAN:
+            Jacon_str_append_fmt_null(builder, "%s", 
+                node->value.bool_val ? "true" : "false");
+            break;
+        case JACON_VALUE_NULL:
+            Jacon_str_append_fmt_null(builder, "%s", "null");
+            break;
+        default:
+            break;
+    }
     return JACON_OK;
 }
 
 Jacon_Error
-Jacon_parse_input(Jacon_content* content, const char* str)
+Jacon_serialize(Jacon_Node* node, char** str)
+{
+    if (node == NULL) return JACON_OK;
+    int ret;
+    Jacon_StringBuilder builder = {0};
+    ret = Jacon_node_as_str(node, &builder, 0, true);
+    if (ret != JACON_OK) {
+        Jacon_str_free(&builder);
+        return ret;
+    }
+    *str = strdup(builder.string);
+    Jacon_str_free(&builder);
+    return JACON_OK;
+}
+
+Jacon_Error
+Jacon_deserialize(Jacon_content* content, const char* str)
 {
     if (content == NULL || str == NULL) return JACON_ERR_NULL_PARAM;
     size_t len = strlen(str);
