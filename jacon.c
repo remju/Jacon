@@ -44,6 +44,9 @@ print_error(Jacon_Error error)
         case JACON_ERR_INVALID_SIZE:
             puts("Jacon error: JACON_ERR_INVALID_SIZE");
             break;
+        case JACON_ERR_APPEND_FSTRING:
+            puts("Jacon error: JACON_ERR_APPEND_FSTRING");
+            break;
         case JACON_END_OF_INPUT:
         case JACON_OK:
         default:
@@ -103,7 +106,7 @@ main(int argc, const char** argv)
     Jacon_init_content(&content);
     struct timeval start, end;
     gettimeofday(&start, NULL);
-    int ret = Jacon_parse_input(&content, json_str);
+    int ret = Jacon_deserialize(&content, json_str);
     gettimeofday(&end, NULL);
     
     double parse_timing =
@@ -129,6 +132,7 @@ main(int argc, const char** argv)
     // char* string;
     // Jacon_get_string_by_name(&content, "string", &string);
     // puts(string);
+    // free(string);
     // bool tb;
     // Jacon_get_bool_by_name(&content, "truebool", &tb);
     // printf("%s\n", tb ? "true" : "false");
@@ -147,9 +151,18 @@ main(int argc, const char** argv)
     // char* object;
     // Jacon_get_string_by_name(&content, "object.property", &object);
     // puts(object);
+    // free(object);
     // char* nested_str;
     // Jacon_get_string_by_name(&content, "nestedobject.nestedProperty.innerProperty", &nested_str);
     // puts(nested_str);
+    // free(nested_str);
+
+    // char* str_node;
+    // ret = Jacon_serialize(content.root, &str_node);
+    // if (str_node != NULL) {
+    //     puts(str_node);
+    //     free(str_node);
+    // }
     
     free(json_str);
     close(fd);
