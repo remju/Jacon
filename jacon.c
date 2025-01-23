@@ -157,9 +157,33 @@ main(int argc, const char** argv)
     // puts(nested_str);
     // free(nested_str);
 
+    // Jacon_Node int_node = Jacon_int(1);
     // char* str_node;
-    // ret = Jacon_serialize(content.root, &str_node);
+    // ret = Jacon_serialize(&int_node, &str_node);
     // if (str_node != NULL) {
+    //     puts("----Single value integer----");
+    //     puts(str_node);
+    //     free(str_node);
+    // }
+
+    // Jacon_Node object_node = Jacon_object();
+    // Jacon_Node int_prop_node = Jacon_int_prop("int", 1);
+    // Jacon_append_child(&object_node, &int_prop_node);
+    // ret = Jacon_serialize(&object_node, &str_node);
+    // if (str_node != NULL) {
+    //     puts("----Ocject node with an integer property----");
+    //     puts(str_node);
+    //     free(str_node);
+    // }
+
+    // Jacon_Node int2_node = Jacon_int(2);
+    // Jacon_Node array_prop_node = Jacon_array_prop("int_list");
+    // Jacon_append_child(&array_prop_node, &int_node);
+    // Jacon_append_child(&array_prop_node, &int2_node);
+    // Jacon_append_child(&object_node, &array_prop_node);
+    // ret = Jacon_serialize(&object_node, &str_node);
+    // if (str_node != NULL) {
+    //     puts("----Object node with an integer and an array of integers property----");
     //     puts(str_node);
     //     free(str_node);
     // }

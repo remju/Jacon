@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <string.h>
 
 // Error codes
 typedef enum {
@@ -201,12 +202,83 @@ Jacon_duplicate_node(const Jacon_Node* node);
 void
 Jacon_free_node(Jacon_Node* node);
 
+// Used to create a named node
+// Please use these if you plan to add the node to an object
+#define Jacon_string_prop(node_name, node_value) (Jacon_Node){ \
+    .name = strdup(node_name), \
+    .type = JACON_VALUE_STRING , \
+    .value.string_val = strdup(node_value) }
+
+#define Jacon_int_prop(node_name, node_value) (Jacon_Node){ \
+    .name = strdup(node_name), \
+    .type = JACON_VALUE_INT , \
+    .value.int_val = node_value }
+
+#define Jacon_float_prop(node_name, node_value) (Jacon_Node){ \
+    .name = strdup(node_name), \
+    .type = JACON_VALUE_FLOAT , \
+    .value.float_val = node_value }
+
+#define Jacon_double_prop(node_name, node_value) (Jacon_Node){ \
+    .name = strdup(node_name), \
+    .type = JACON_VALUE_DOUBLE , \
+    .value.double_val = node_value }
+
+#define Jacon_boolean_prop(node_name, node_value) (Jacon_Node){ \
+    .name = strdup(node_name), \
+    .type = JACON_VALUE_BOOLEAN , \
+    .value.bool_val = node_value }
+
+#define Jacon_null_prop(node_name) (Jacon_Node){ \
+    .name = strdup(node_name), \
+    .type = JACON_VALUE_NULL }
+
+#define Jacon_array_prop(node_name) (Jacon_Node){ \
+    .name = strdup(node_name), \
+    .type = JACON_VALUE_ARRAY }
+
+#define Jacon_object_prop(node_name) (Jacon_Node){ \
+    .name = strdup(node_name), \
+    .type = JACON_VALUE_OBJECT
+
+// Used to create a single value node
+// Should not be used to create nodes that will be put as object property
+// Please use Jacon_type_prop for that
+#define Jacon_string(node_value) (Jacon_Node){ \
+    .type = JACON_VALUE_STRING , \
+    .value.string_val = strdup(node_value) }
+
+#define Jacon_int(node_value) (Jacon_Node){ \
+    .type = JACON_VALUE_INT , \
+    .value.int_val = node_value }
+
+#define Jacon_float(node_value) (Jacon_Node){ \
+    .type = JACON_VALUE_FLOAT , \
+    .value.float_val = node_value }
+
+#define Jacon_double(node_value) (Jacon_Node){ \
+    .type = JACON_VALUE_DOUBLE , \
+    .value.double_val = node_value }
+
+#define Jacon_boolean(node_value) (Jacon_Node){ \
+    .type = JACON_VALUE_BOOLEAN , \
+    .value.bool_val = node_value }
+
+#define Jacon_null() (Jacon_Node){ \
+    .type = JACON_VALUE_NULL }
+
+#define Jacon_array() (Jacon_Node){ \
+    .type = JACON_VALUE_ARRAY }
+
+#define Jacon_object() (Jacon_Node){ \
+    .type = JACON_VALUE_OBJECT }
+
+
 #endif // JACON_H
 
 #ifdef JACON_IMPLEMENTATION
 
 #include <stdlib.h>
-#include <string.h>
 #include <stdio.h>
 #include <float.h>
 #include <math.h>
