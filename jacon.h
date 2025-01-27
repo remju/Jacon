@@ -239,7 +239,7 @@ Jacon_free_node(Jacon_Node* node);
 
 #define Jacon_object_prop(node_name) (Jacon_Node){ \
     .name = strdup(node_name), \
-    .type = JACON_VALUE_OBJECT
+    .type = JACON_VALUE_OBJECT }
 
 // Used to create a single value node
 // Should not be used to create nodes that will be put as object property
