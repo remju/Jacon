@@ -20,6 +20,7 @@ typedef enum {
     JACON_ERR_MEMORY_ALLOCATION,
     JACON_ERR_INVALID_SIZE,
     JACON_ERR_APPEND_FSTRING,
+    JACON_ERR_KEY_NOT_FOUND,
     JACON_ERR_UNREACHABLE_STATEMENT,
 } Jacon_Error;
 
@@ -288,7 +289,9 @@ Jacon_free_node(Jacon_Node* node);
 
 #endif // JACON_H
 
+#ifndef JACON_DEFINITIONS
 #ifdef JACON_IMPLEMENTATION
+#define JACON_DEFINITIONS
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -1658,10 +1661,13 @@ Jacon_get_value_by_name(Jacon_content* content, const char* name, Jacon_ValueTyp
         return JACON_ERR_NULL_PARAM;
     }
     Jacon_Node* ptr = (Jacon_Node*)Jacon_hm_get(&content->entries, name);
+    if (ptr == NULL) {
+        return JACON_ERR_KEY_NOT_FOUND;
+    }
     switch (type) {
         case JACON_VALUE_STRING:
             *(char**)value = strdup(ptr->value.string_val);
-            if (value == NULL) return JACON_ERR_MEMORY_ALLOCATION;
+            if (*(char**)value == NULL) return JACON_ERR_MEMORY_ALLOCATION;
             break;
         case JACON_VALUE_INT:
             *(int*)value = ptr->value.int_val;
@@ -1687,7 +1693,7 @@ Jacon_get_value_by_name(Jacon_content* content, const char* name, Jacon_ValueTyp
 Jacon_Error
 Jacon_get_string_by_name(Jacon_content* content, const char* name, char** value)
 {
-    return Jacon_get_value_by_name(content, name, JACON_VALUE_STRING, value);
+    return Jacon_get_value_by_name(content, name, JACON_VALUE_STRING, (void*)value);
 }
 
 Jacon_Error
@@ -2139,3 +2145,4 @@ Jacon_deserialize(Jacon_content* content, const char* str)
 }
 
 #endif // JACON_IMPLEMENTATION
+#endif // JACON_DEFINITIONS
