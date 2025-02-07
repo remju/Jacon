@@ -1,3 +1,7 @@
+# Some of the functions in this file were used before refactoring from a header only library.
+# The github worflow might not pass because of this.
+# Until refactor of this file, some of its content is useless.
+
 CC = gcc
 CFLAGS = -Wall -Wextra -ggdb -Wswitch-enum
 
