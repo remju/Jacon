@@ -2,18 +2,9 @@
 # Jacon
 Easy to use Json parsing library in C
 
-# Development
-This library is in development and is not ready for use.
-
 # Description
-Convert an input string into a queryable object or an object into a string.
-
-# How to use
-Add this where you plan to use Jacon and ... use it ?
-```C
-#define JACON_IMPLEMENTATION
-#include "jacon.h"
-```
+Serialize a struct into a string.
+Deserializing a Json string into a struct, if input is a valid object, also get a Map of values for an easier querrying. 
 
 # Tests
 Inputs tested using validation files from:
