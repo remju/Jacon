@@ -22,6 +22,7 @@ typedef enum {
     JACON_ERR_APPEND_FSTRING,
     JACON_ERR_KEY_NOT_FOUND,
     JACON_ERR_UNREACHABLE_STATEMENT,
+    JACON_ERR_DUPLICATE_NAME,
 } Jacon_Error;
 
 typedef struct Jacon_StringBuilder Jacon_StringBuilder;
@@ -87,6 +88,35 @@ Jacon_hm_remove(Jacon_HashMap* map, const char* key);
  */
 void
 Jacon_hm_free(Jacon_HashMap* map);
+
+
+typedef struct Jacon_HashSetEntry Jacon_HashSetEntry;
+/**
+ * Key could be avoided if we had a hash func that produces no collision
+ * since the hashed key would always point to its entry and not another one's
+ */
+struct Jacon_HashSetEntry {
+    char* key;
+    Jacon_HashSetEntry* next;  
+};
+
+typedef struct Jacon_HashSet {
+    size_t count;
+    size_t capacity;
+    Jacon_HashSetEntry** entries;
+} Jacon_HashSet;
+
+bool
+Jacon_hs_exists(Jacon_HashSet *set, const char* key);
+
+Jacon_Error
+Jacon_hs_put(Jacon_HashSet *set, const char* key);
+
+void
+Jacon_hs_free(Jacon_HashSet *set);
+
+Jacon_Error
+Jacon_hs_remove(Jacon_HashSet *set, const char* key);
 
 #define JACON_TOKENIZER_DEFAULT_CAPACITY 256
 #define JACON_TOKENIZER_DEFAULT_RESIZE_FACTOR 2

@@ -113,7 +113,7 @@ Jacon_hash(unsigned char *str)
  * Create a new entry with the key, value pair
  */
 Jacon_HashMapEntry*
-Jacon_create_entry(const char* key, void* value)
+Jacon_create_mapentry(const char* key, void* value)
 {
     Jacon_HashMapEntry* entry = calloc(1, sizeof(Jacon_HashMapEntry));
     if (entry == NULL) {
@@ -156,7 +156,7 @@ Jacon_hm_resize(Jacon_HashMap* map)
     tmp.size = map->size * JACON_MAP_RESIZE_FACTOR;
     tmp.entries = calloc(tmp.size, sizeof(Jacon_HashMapEntry));
     if(tmp.entries == NULL) {
-        return -1;
+        return JACON_ERR_MEMORY_ALLOCATION;
     }
 
     for(size_t i = 0; i < map->size; i++) {
@@ -173,7 +173,7 @@ Jacon_hm_resize(Jacon_HashMap* map)
     }
     Jacon_hm_free(map);
     *map = tmp;
-    return 0;
+    return JACON_OK;
 }
 
 void*
@@ -201,10 +201,10 @@ Jacon_Error
 Jacon_hm_put(Jacon_HashMap* map, const char* key, void* value)
 {
     if(map == NULL) {
-        return -1;
+        return JACON_ERR_NULL_PARAM;
     }
     if(key == NULL) {
-        return -1;
+        return JACON_ERR_NULL_PARAM;
     }
 
     int ret;
@@ -219,7 +219,7 @@ Jacon_hm_put(Jacon_HashMap* map, const char* key, void* value)
     unsigned long hashcode = Jacon_hash((unsigned char*)key);
     size_t index = hashcode % map->size;
 
-    Jacon_HashMapEntry* new_entry = Jacon_create_entry(key, value);
+    Jacon_HashMapEntry* new_entry = Jacon_create_mapentry(key, value);
     if (new_entry == NULL) {
         return JACON_ERR_MEMORY_ALLOCATION;
     }
@@ -235,7 +235,7 @@ Jacon_hm_put(Jacon_HashMap* map, const char* key, void* value)
                 current->value = value;
                 free(new_entry->key);
                 free(new_entry);
-                return 0;
+                return JACON_OK;
             }
             current = current->next_entry;
         }
@@ -243,7 +243,7 @@ Jacon_hm_put(Jacon_HashMap* map, const char* key, void* value)
         map->entries[index] = new_entry;
     }
     map->entries_count++;
-    return 0;
+    return JACON_OK;
 }
 
 void*
@@ -309,6 +309,171 @@ Jacon_hm_free(Jacon_HashMap* map)
     }
     free(map->entries);
     map->entries = NULL;
+}
+
+/**
+ * Create a new entry with the key
+ */
+Jacon_HashSetEntry*
+Jacon_create_setentry(const char* key)
+{
+    Jacon_HashSetEntry* entry = calloc(1, sizeof(Jacon_HashSetEntry));
+    if (entry == NULL) {
+        return NULL;
+    }
+    entry->key = strdup(key);
+    if (entry->key == NULL) {
+        free(entry);
+        return NULL;
+    }
+    entry->next = NULL;
+    return entry;
+}
+
+Jacon_Error
+Jacon_hs_resize(Jacon_HashSet* set)
+{
+    Jacon_HashSet tmp = {0};
+    tmp.capacity = set->capacity * JACON_MAP_RESIZE_FACTOR;
+    tmp.entries = calloc(tmp.capacity, sizeof(Jacon_HashSetEntry));
+    if(tmp.entries == NULL) {
+        return JACON_ERR_MEMORY_ALLOCATION;
+    }
+
+    for(size_t i = 0; i < set->capacity; i++) {
+        if(set->entries[i] != NULL) {
+            Jacon_hs_put(&tmp, set->entries[i]->key);
+            Jacon_HashSetEntry* entry = set->entries[i];
+            while(entry != NULL) {
+                Jacon_hs_put(&tmp, set->entries[i]->key);
+                entry = entry->next;
+            }
+        }
+    }
+    Jacon_hs_free(set);
+    *set = tmp;
+    return JACON_OK;
+}
+
+
+bool
+Jacon_hs_exists(Jacon_HashSet *set, const char* key)
+{
+    unsigned long hashcode = Jacon_hash((unsigned char*)key);
+    size_t index = hashcode % set->capacity;
+
+    Jacon_HashSetEntry* current = set->entries[index];
+    while (current != NULL) {
+        if (strcmp(current->key, key) == 0) {
+            return true;
+        }
+        current = current->next;
+    }
+
+    return false;
+}
+
+Jacon_Error
+Jacon_hs_put(Jacon_HashSet *set, const char* key)
+{
+    if(set == NULL) {
+        return JACON_ERR_NULL_PARAM;
+    }
+    if(key == NULL) {
+        return JACON_ERR_NULL_PARAM;
+    }
+
+    int ret;
+    // Resize if set is full
+    // Subject to change to partially full (75%)
+    if(set->capacity == set->count) {
+        ret = Jacon_hs_resize(set);
+        if (ret != JACON_OK) return ret;
+    }
+
+    // Hashcode and bucket index
+    unsigned long hashcode = Jacon_hash((unsigned char*)key);
+    size_t index = hashcode % set->capacity;
+
+    Jacon_HashSetEntry* new_entry = Jacon_create_setentry(key);
+    if (new_entry == NULL) {
+        return JACON_ERR_MEMORY_ALLOCATION;
+    }
+
+    if(set->entries[index] == NULL) { // Empty bucket
+        set->entries[index] = new_entry;
+    }
+    else { // Full bucket
+        Jacon_HashSetEntry* current = set->entries[index];
+        while (current != NULL) {
+            if (strcmp(current->key, key) == 0) {
+                return JACON_OK;
+            }
+            current = current->next;
+        }
+        new_entry->next = set->entries[index];
+        set->entries[index] = new_entry;
+    }
+    set->count++;
+    return JACON_OK;
+}
+
+void
+Jacon_hs_free_entry(Jacon_HashSetEntry* entry)
+{
+    if (entry == NULL) {
+        return;
+    }
+    if (entry->key != NULL) {
+        free(entry->key);
+        entry->key = NULL;
+    }
+    free(entry);
+}
+
+void 
+Jacon_hs_free(Jacon_HashSet* set) 
+{
+    if (set == NULL || set->entries == NULL)
+        return;
+    for (size_t i = 0; i < set->capacity; i++) {
+        Jacon_HashSetEntry* entry = set->entries[i];
+        while (entry != NULL) {
+            Jacon_HashSetEntry* next = entry->next;
+            Jacon_hs_free_entry(entry);
+            entry = next;
+        }
+    }
+    free(set->entries);
+    set->entries = NULL;
+}
+
+Jacon_Error
+Jacon_hs_remove(Jacon_HashSet *set, const char* key)
+{
+    if(set == NULL) {
+        return JACON_ERR_NULL_PARAM;
+    }
+
+    unsigned long hashcode = Jacon_hash((unsigned char*)key);
+    size_t index = hashcode % set->capacity;
+
+    Jacon_HashSetEntry* current = set->entries[index];
+    Jacon_HashSetEntry* prev = NULL;
+    while (current != NULL) {
+        if (strcmp(current->key, key) == 0) {
+            if (prev != NULL) {
+                prev->next = current->next;
+            }
+            Jacon_hs_free_entry(current);
+            set->count--;
+            return JACON_OK;
+        }
+        prev = current;
+        current = current->next;
+    }
+
+    return JACON_OK;
 }
 
 // Debug print token
@@ -943,6 +1108,13 @@ Jacon_validate_object(Jacon_Tokenizer* tokenizer, size_t* index)
     }
     Jacon_Token* current = &tokenizer->tokens[*index];
     Jacon_Token* last = NULL;
+    Jacon_HashSet names_set = (Jacon_HashSet){
+        .entries = calloc(10, sizeof(Jacon_HashSetEntry*)),
+        .capacity = 10
+    };
+    if (names_set.entries == NULL) {
+        return JACON_ERR_MEMORY_ALLOCATION;
+    }
     bool last_value = false;
     while (current->type != JACON_TOKEN_OBJECT_END) {
         current = &tokenizer->tokens[*index];
@@ -986,10 +1158,25 @@ Jacon_validate_object(Jacon_Tokenizer* tokenizer, size_t* index)
                 break;
             case JACON_TOKEN_STRING:
                 if (last == NULL) {
+                    if (Jacon_hs_exists(&names_set, tokenizer->tokens[*index].string_val)) {
+                        Jacon_hs_free(&names_set);
+                        return JACON_ERR_DUPLICATE_NAME;
+                    }
+                    Jacon_hs_put(&names_set, tokenizer->tokens[*index].string_val);
                     last = &tokenizer->tokens[*index];
                     (*index)++;
                 }
-                else if (last->type == JACON_TOKEN_COLON || last->type == JACON_TOKEN_COMMA) {
+                else if (last->type == JACON_TOKEN_COMMA) {
+                    if (Jacon_hs_exists(&names_set, tokenizer->tokens[*index].string_val)) {
+                        Jacon_hs_free(&names_set);
+                        return JACON_ERR_DUPLICATE_NAME;
+                    }
+                    Jacon_hs_put(&names_set, tokenizer->tokens[*index].string_val);
+                    last = &tokenizer->tokens[*index];
+                    (*index)++;
+                    last_value = true;
+                }
+                else if (last->type == JACON_TOKEN_COLON ) {
                     last = &tokenizer->tokens[*index];
                     (*index)++;
                     last_value = true;
