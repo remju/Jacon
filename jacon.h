@@ -224,14 +224,14 @@ Jacon_deserialize(Jacon_content* content, const char* str);
 /**
  * Parse a node into its Json representation
  */
-Jacon_Error
-Jacon_serialize(Jacon_Node* node, char** str);
+char *
+Jacon_serialize(Jacon_Node* node);
 
 /**
  * Parse a node into its unformatted (compact) Json representation
  */
-Jacon_Error
-Jacon_serialize_unformatted(Jacon_Node* node, char** str);
+char *
+Jacon_serialize_unformatted(Jacon_Node* node);
 
 /**
  * Duplicate a node

@@ -1965,36 +1965,34 @@ Jacon_node_as_str_unformatted(Jacon_Node* node, Jacon_StringBuilder* builder)
     return JACON_OK;
 }
 
-Jacon_Error
-Jacon_serialize(Jacon_Node* node, char** str)
+char *
+Jacon_serialize(Jacon_Node* node)
 {
-    if (node == NULL) return JACON_OK;
-    int ret;
+    if (node == NULL) return NULL;
+    char *str = NULL;
     Jacon_StringBuilder builder = {0};
-    ret = Jacon_node_as_str(node, &builder, 0, true);
-    if (ret != JACON_OK) {
-        Jacon_str_free(&builder);
-        return ret;
+    if (Jacon_node_as_str(node, &builder, 0, true)) {
+        goto ret;
     }
-    *str = strdup(builder.string);
+    str = strdup(builder.string);
+ret:
     Jacon_str_free(&builder);
-    return JACON_OK;
+    return str;
 }
 
-Jacon_Error
-Jacon_serialize_unformatted(Jacon_Node* node, char** str)
+char *
+Jacon_serialize_unformatted(Jacon_Node* node)
 {
-    if (node == NULL) return JACON_OK;
-    int ret;
+    if (node == NULL) return NULL;
+    char *str = NULL;
     Jacon_StringBuilder builder = {0};
-    ret = Jacon_node_as_str_unformatted(node, &builder);
-    if (ret != JACON_OK) {
-        Jacon_str_free(&builder);
-        return ret;
+    if (Jacon_node_as_str_unformatted(node, &builder)) {
+        goto ret;
     }
-    *str = strdup(builder.string);
+    str = strdup(builder.string);
+ret:    
     Jacon_str_free(&builder);
-    return JACON_OK;
+    return str;
 }
 
 Jacon_Error
