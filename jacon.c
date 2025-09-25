@@ -10,6 +10,7 @@
 
 #define Jacon_str_append_null(builder, ...) Jacon_str_append(builder, __VA_ARGS__, NULL)
 #define Jacon_str_append_fmt_null(builder, ...) Jacon_str_append_fmt(builder, __VA_ARGS__, NULL)
+#define Jacon_defer_return(value) do { ret = (value); goto defer; } while (0)
 
 Jacon_Error 
 Jacon_str_append(Jacon_StringBuilder* builder, ...) 
@@ -130,48 +131,37 @@ Jacon_create_mapentry(const char* key, void* value)
 }
 
 Jacon_Error
-Jacon_hm_create(Jacon_HashMap* map, size_t init_size)
-{
-    if (init_size == 0) {
-        return JACON_ERR_INVALID_SIZE;
-    }
-    map = malloc(sizeof(Jacon_HashMap));
-    if (map == NULL) {
-        return JACON_ERR_MEMORY_ALLOCATION;
-    }
-    map->size = init_size;
-    map->entries_count = 0;
-    map->entries = calloc(init_size, sizeof(Jacon_HashMapEntry*));
-    if (map->entries == NULL) {
-        free(map);
-        return JACON_ERR_MEMORY_ALLOCATION;
-    }
-    return JACON_OK;
-}
-
-Jacon_Error
 Jacon_hm_resize(Jacon_HashMap* map)
 {
     Jacon_HashMap tmp = {0};
     tmp.size = map->size * JACON_MAP_RESIZE_FACTOR;
-    tmp.entries = calloc(tmp.size, sizeof(Jacon_HashMapEntry));
+    tmp.entries = calloc(tmp.size, sizeof(Jacon_HashMapEntry*));
     if(tmp.entries == NULL) {
         return JACON_ERR_MEMORY_ALLOCATION;
     }
 
     for(size_t i = 0; i < map->size; i++) {
         if(map->entries[i] != NULL) {
-            Jacon_Node* duped = Jacon_duplicate_node(map->entries[i]->value);
-            Jacon_hm_put(&tmp, map->entries[i]->key, duped);
+            Jacon_hm_put(&tmp, map->entries[i]->key, map->entries[i]->value);
             Jacon_HashMapEntry* entry = map->entries[i]->next_entry;
             while(entry != NULL) {
-                duped = Jacon_duplicate_node(entry->value);
-                Jacon_hm_put(&tmp, entry->key, duped);
+                Jacon_hm_put(&tmp, entry->key, entry->value);
                 entry = entry->next_entry;
             }
         }
     }
-    Jacon_hm_free(map);
+    
+    for (size_t i = 0; i < map->size; i++) {
+        Jacon_HashMapEntry* entry = map->entries[i];
+        while (entry != NULL) {
+            Jacon_HashMapEntry* next = entry->next_entry;
+            free(entry->key);
+            free(entry);
+            entry = next;
+        }
+    }
+    free(map->entries);
+    map->entries = NULL;
     *map = tmp;
     return JACON_OK;
 }
@@ -224,24 +214,19 @@ Jacon_hm_put(Jacon_HashMap* map, const char* key, void* value)
         return JACON_ERR_MEMORY_ALLOCATION;
     }
 
-    if(map->entries[index] == NULL) { // Empty bucket
-        map->entries[index] = new_entry;
-    }
-    else { // Full bucket
-        Jacon_HashMapEntry* current = map->entries[index];
-        while (current != NULL) {
-            if (strcmp(current->key, key) == 0) {
-                // Replace value if same key
-                current->value = value;
-                free(new_entry->key);
-                free(new_entry);
-                return JACON_OK;
-            }
-            current = current->next_entry;
+    Jacon_HashMapEntry* current = map->entries[index];
+    while (current != NULL) {
+        if (strcmp(current->key, key) == 0) {
+            // Replace value if same key
+            current->value = value;
+            free(new_entry->key);
+            free(new_entry);
+            return JACON_OK;
         }
-        new_entry->next_entry = map->entries[index];
-        map->entries[index] = new_entry;
+        current = current->next_entry;
     }
+    new_entry->next_entry = map->entries[index];
+    map->entries[index] = new_entry;
     map->entries_count++;
     return JACON_OK;
 }
@@ -335,7 +320,7 @@ Jacon_hs_resize(Jacon_HashSet* set)
 {
     Jacon_HashSet tmp = {0};
     tmp.capacity = set->capacity * JACON_MAP_RESIZE_FACTOR;
-    tmp.entries = calloc(tmp.capacity, sizeof(Jacon_HashSetEntry));
+    tmp.entries = calloc(tmp.capacity, sizeof(Jacon_HashSetEntry*));
     if(tmp.entries == NULL) {
         return JACON_ERR_MEMORY_ALLOCATION;
     }
@@ -343,9 +328,9 @@ Jacon_hs_resize(Jacon_HashSet* set)
     for(size_t i = 0; i < set->capacity; i++) {
         if(set->entries[i] != NULL) {
             Jacon_hs_put(&tmp, set->entries[i]->key);
-            Jacon_HashSetEntry* entry = set->entries[i];
+            Jacon_HashSetEntry* entry = set->entries[i]->next;
             while(entry != NULL) {
-                Jacon_hs_put(&tmp, set->entries[i]->key);
+                Jacon_hs_put(&tmp, entry->key);
                 entry = entry->next;
             }
         }
@@ -667,7 +652,7 @@ Jacon_duplicate_node(const Jacon_Node* node)
         return NULL;
     }
 
-    Jacon_Node* new_node = (Jacon_Node*)malloc(sizeof(Jacon_Node));
+    Jacon_Node* new_node = (Jacon_Node*)calloc(1, sizeof(Jacon_Node));
     if (new_node == NULL) {
         return NULL;
     }
@@ -745,7 +730,6 @@ Jacon_free_node(Jacon_Node* node)
         }
         free(node->childs);
         node->childs = NULL;
-        return;
     }
     free(node);
     node = NULL;
@@ -757,25 +741,18 @@ Jacon_append_token(Jacon_Tokenizer* tokenizer, Jacon_Token token)
     if (tokenizer == NULL) {
         return JACON_ERR_NULL_PARAM;
     }
-    if (tokenizer->tokens == NULL) {
-        tokenizer->tokens = (Jacon_Token*)calloc(
-            JACON_TOKENIZER_DEFAULT_CAPACITY, sizeof(Jacon_Token));
-        if (tokenizer->tokens == NULL) {
-            perror("Jacon_append_token array alloc error");
+
+    size_t new_count = tokenizer->count + 1;
+    if (new_count > tokenizer->capacity)
+    {
+        size_t new_capacity = tokenizer->capacity == 0 ?
+            JACON_TOKENIZER_DEFAULT_CAPACITY : tokenizer->capacity * 2;
+        tokenizer->tokens = realloc(tokenizer->tokens, new_capacity * sizeof(Jacon_Token));
+        if (!tokenizer->tokens) {
             return JACON_ERR_MEMORY_ALLOCATION;
         }
-        tokenizer->capacity = JACON_TOKENIZER_DEFAULT_CAPACITY;
-    }
-    if (tokenizer->count >= tokenizer->capacity) {
-        size_t new_capacity = tokenizer->capacity * 2;
-        Jacon_Token* new_tokens = realloc(tokenizer->tokens, new_capacity * sizeof(Jacon_Token));
-        if (!new_tokens) {
-            return JACON_ERR_MEMORY_ALLOCATION;
-        }
-        tokenizer->tokens = new_tokens;
         tokenizer->capacity = new_capacity;
     }
-
     tokenizer->tokens[tokenizer->count++] = token;
     return JACON_OK;
 }
@@ -786,41 +763,34 @@ Jacon_append_child(Jacon_Node* node, Jacon_Node* child)
     if (node == NULL) {
         return JACON_ERR_NULL_PARAM;
     }
-    if (node->childs == NULL) {
-        node->childs = calloc(
-            JACON_NODE_DEFAULT_CHILD_CAPACITY, sizeof(Jacon_Node*));
-        if (node->childs == NULL) {
+
+    size_t new_count = node->child_count + 1;
+    if (new_count > node->child_capacity)
+    {
+        size_t new_capacity = node->child_capacity == 0 ?
+            JACON_NODE_DEFAULT_CHILD_CAPACITY : 
+            node->child_capacity * JACON_NODE_DEFAULT_RESIZE_FACTOR;
+        node->childs = realloc(node->childs, new_capacity * sizeof(Jacon_Node*));
+        if (!node->childs) {
             perror("Jacon_append_node_child array alloc error");
             return JACON_ERR_MEMORY_ALLOCATION;
         }
-        node->child_capacity = JACON_NODE_DEFAULT_CHILD_CAPACITY;
+        node->child_capacity = new_capacity;
     }
-    if (node->child_count == node->child_capacity) {
-        Jacon_Node** tmp = realloc(
-            node->childs, 
-            node->child_capacity * JACON_NODE_DEFAULT_RESIZE_FACTOR * sizeof(Jacon_Node*));
-        if (tmp == NULL) {
-            perror("Jacon_append_node_child array realloc error");
-            return JACON_ERR_MEMORY_ALLOCATION;
-        }
-        node->childs = tmp;
-        node->child_capacity *= JACON_NODE_DEFAULT_RESIZE_FACTOR;
-    }
-
     node->childs[node->child_count++] = child;
     return JACON_OK;
 }
 
 // Check if is a valid hex char
 bool 
-Jacon_is_hex_digit(char c) 
+Jacon_is_hex_digit(char c)
 {
     return isdigit(c) || (tolower(c) >= 'a' && tolower(c) <= 'f');
 }
 
 // Only allow json allowed whitespace chars
 bool
-Jacon_is_whitespace(char c) 
+Jacon_is_whitespace(char c)
 {
     return c == ' ' || c == '\r' || c == '\t' || c == '\n';
 }
@@ -1113,7 +1083,7 @@ Jacon_validate_object(Jacon_Tokenizer* tokenizer, size_t* index)
         .capacity = 10
     };
     if (names_set.entries == NULL) {
-        return JACON_ERR_MEMORY_ALLOCATION;
+        Jacon_defer_return(JACON_ERR_MEMORY_ALLOCATION);
     }
     bool last_value = false;
     while (current->type != JACON_TOKEN_OBJECT_END) {
@@ -1121,46 +1091,45 @@ Jacon_validate_object(Jacon_Tokenizer* tokenizer, size_t* index)
         switch (current->type) {
             case JACON_TOKEN_ARRAY_START:
                 if (last == NULL || last->type != JACON_TOKEN_COLON)
-                    return JACON_ERR_INVALID_JSON;
+                    Jacon_defer_return(JACON_ERR_INVALID_JSON);
 
                 (*index)++;
                 ret = Jacon_validate_array(tokenizer, index);
-                if (ret != JACON_OK) return ret;
+                if (ret != JACON_OK) Jacon_defer_return(ret);
                 last_value = true;
                 break;
             case JACON_TOKEN_OBJECT_START:
                 if (last == NULL || last->type != JACON_TOKEN_COLON)
-                    return JACON_ERR_INVALID_JSON;
+                    Jacon_defer_return(JACON_ERR_INVALID_JSON);
 
                 (*index)++;
                 ret = Jacon_validate_object(tokenizer, index);
-                if (ret != JACON_OK) return ret;
+                if (ret != JACON_OK) Jacon_defer_return(ret);
                 last_value = true;
                 break;
             case JACON_TOKEN_COMMA:
-                if (last == NULL) return JACON_ERR_INVALID_JSON;
+                if (last == NULL) Jacon_defer_return(JACON_ERR_INVALID_JSON);
                 else if (!last_value) {
-                    return JACON_ERR_INVALID_JSON;
+                    Jacon_defer_return(JACON_ERR_INVALID_JSON);
                 }
                 last = &tokenizer->tokens[*index];
                 (*index)++;
                 last_value = false;
                 break;
             case JACON_TOKEN_ARRAY_END:
-                return JACON_ERR_INVALID_JSON;
+                Jacon_defer_return(JACON_ERR_INVALID_JSON);
             case JACON_TOKEN_OBJECT_END:
-                return JACON_ERR_UNREACHABLE_STATEMENT;
+                Jacon_defer_return(JACON_ERR_UNREACHABLE_STATEMENT);
             case JACON_TOKEN_COLON:
-                if (last == NULL) return JACON_ERR_INVALID_JSON;
-                if (last->type != JACON_TOKEN_STRING) return JACON_ERR_INVALID_JSON;
+                if (last == NULL) Jacon_defer_return(JACON_ERR_INVALID_JSON);
+                if (last->type != JACON_TOKEN_STRING) Jacon_defer_return(JACON_ERR_INVALID_JSON);
                 last = &tokenizer->tokens[*index];
                 (*index)++;
                 break;
             case JACON_TOKEN_STRING:
                 if (last == NULL) {
                     if (Jacon_hs_exists(&names_set, tokenizer->tokens[*index].string_val)) {
-                        Jacon_hs_free(&names_set);
-                        return JACON_ERR_DUPLICATE_NAME;
+                        Jacon_defer_return(JACON_ERR_DUPLICATE_NAME);
                     }
                     Jacon_hs_put(&names_set, tokenizer->tokens[*index].string_val);
                     last = &tokenizer->tokens[*index];
@@ -1168,8 +1137,7 @@ Jacon_validate_object(Jacon_Tokenizer* tokenizer, size_t* index)
                 }
                 else if (last->type == JACON_TOKEN_COMMA) {
                     if (Jacon_hs_exists(&names_set, tokenizer->tokens[*index].string_val)) {
-                        Jacon_hs_free(&names_set);
-                        return JACON_ERR_DUPLICATE_NAME;
+                        Jacon_defer_return(JACON_ERR_DUPLICATE_NAME);
                     }
                     Jacon_hs_put(&names_set, tokenizer->tokens[*index].string_val);
                     last = &tokenizer->tokens[*index];
@@ -1182,7 +1150,7 @@ Jacon_validate_object(Jacon_Tokenizer* tokenizer, size_t* index)
                     last_value = true;
                 }
                 else {
-                    return JACON_ERR_UNREACHABLE_STATEMENT;
+                    Jacon_defer_return(JACON_ERR_UNREACHABLE_STATEMENT);
                 }
                 break;
             case JACON_TOKEN_INT:
@@ -1191,20 +1159,22 @@ Jacon_validate_object(Jacon_Tokenizer* tokenizer, size_t* index)
             case JACON_TOKEN_BOOLEAN:
             case JACON_TOKEN_NULL:
                 if (last == NULL || last->type != JACON_TOKEN_COLON)
-                    return JACON_ERR_INVALID_JSON;
+                    Jacon_defer_return(JACON_ERR_INVALID_JSON);
                 last = &tokenizer->tokens[*index];
                 (*index)++;
                 last_value = true;
                 break;
             default:
-                return JACON_ERR_UNREACHABLE_STATEMENT;
+                Jacon_defer_return(JACON_ERR_UNREACHABLE_STATEMENT);
         }
         if (*index >= tokenizer->count) {
-            return JACON_ERR_INVALID_JSON;
+            Jacon_defer_return(JACON_ERR_INVALID_JSON);
         }
         current = &tokenizer->tokens[*index];
     }
     (*index)++;
+defer:
+    Jacon_hs_free(&names_set);
     return JACON_OK;
 }
 
@@ -1541,8 +1511,6 @@ Jacon_free_content(Jacon_content* content)
 
     if (content->root != NULL) {
         Jacon_free_node(content->root);
-        free(content->root);
-        content->root = NULL;
     }
     Jacon_hm_free(&content->entries);
     return JACON_OK;
