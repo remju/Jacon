@@ -23,6 +23,7 @@ typedef enum {
     JACON_ERR_KEY_NOT_FOUND,
     JACON_ERR_UNREACHABLE_STATEMENT,
     JACON_ERR_DUPLICATE_NAME,
+    JACON_ERR_CHILD_NOT_FOUND,
 } Jacon_Error;
 
 typedef struct Jacon_StringBuilder Jacon_StringBuilder;
@@ -214,6 +215,24 @@ Jacon_validate_input(Jacon_Tokenizer* tokenizer);
  */
 Jacon_Error
 Jacon_append_child(Jacon_Node* node, Jacon_Node* child);
+
+/**
+ * Replace a node's child by another the child to replace is found by name.
+ */
+Jacon_Error
+Jacon_replace_child(Jacon_Node* parent, const char* name, Jacon_Node* new);
+
+/**
+ * Find a node by its name in a node's childs.
+ */
+Jacon_Node*
+Jacon_get_child_by_name(Jacon_Node *parent, const char *name);
+
+/**
+ * Remove a node by name from a node's childs.
+ */
+Jacon_Error
+Jacon_remove_child_by_name(Jacon_Node* parent, const char* name);
 
 /**
  * Add a node to a dictionnary

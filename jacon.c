@@ -190,18 +190,13 @@ Jacon_hm_get(Jacon_HashMap* map, const char* key)
 Jacon_Error
 Jacon_hm_put(Jacon_HashMap* map, const char* key, void* value)
 {
-    if(map == NULL) {
-        return JACON_ERR_NULL_PARAM;
-    }
-    if(key == NULL) {
+    if (map == NULL || key == NULL) {
         return JACON_ERR_NULL_PARAM;
     }
 
-    int ret;
-    // Resize if map is full
-    // Subject to change to partially full (75%)
-    if(map->size == map->entries_count) {
-        ret = Jacon_hm_resize(map);
+    // Resize if necessary
+    if (map->entries_count == map->size) {
+        int ret = Jacon_hm_resize(map);
         if (ret != JACON_OK) return ret;
     }
 
@@ -209,22 +204,21 @@ Jacon_hm_put(Jacon_HashMap* map, const char* key, void* value)
     unsigned long hashcode = Jacon_hash((unsigned char*)key);
     size_t index = hashcode % map->size;
 
-    Jacon_HashMapEntry* new_entry = Jacon_create_mapentry(key, value);
-    if (new_entry == NULL) {
-        return JACON_ERR_MEMORY_ALLOCATION;
-    }
-
     Jacon_HashMapEntry* current = map->entries[index];
     while (current != NULL) {
         if (strcmp(current->key, key) == 0) {
-            // Replace value if same key
+            if (current->value != NULL) {
+                Jacon_free_node(current->value);
+            }
             current->value = value;
-            free(new_entry->key);
-            free(new_entry);
             return JACON_OK;
         }
         current = current->next_entry;
     }
+
+    Jacon_HashMapEntry* new_entry = Jacon_create_mapentry(key, value);
+    if (new_entry == NULL) return JACON_ERR_MEMORY_ALLOCATION;
+
     new_entry->next_entry = map->entries[index];
     map->entries[index] = new_entry;
     map->entries_count++;
@@ -743,8 +737,7 @@ Jacon_append_token(Jacon_Tokenizer* tokenizer, Jacon_Token token)
     }
 
     size_t new_count = tokenizer->count + 1;
-    if (new_count > tokenizer->capacity)
-    {
+    if (new_count > tokenizer->capacity) {
         size_t new_capacity = tokenizer->capacity == 0 ?
             JACON_TOKENIZER_DEFAULT_CAPACITY : tokenizer->capacity * 2;
         tokenizer->tokens = realloc(tokenizer->tokens, new_capacity * sizeof(Jacon_Token));
@@ -765,8 +758,7 @@ Jacon_append_child(Jacon_Node* node, Jacon_Node* child)
     }
 
     size_t new_count = node->child_count + 1;
-    if (new_count > node->child_capacity)
-    {
+    if (new_count > node->child_capacity) {
         size_t new_capacity = node->child_capacity == 0 ?
             JACON_NODE_DEFAULT_CHILD_CAPACITY : 
             node->child_capacity * JACON_NODE_DEFAULT_RESIZE_FACTOR;
@@ -779,6 +771,63 @@ Jacon_append_child(Jacon_Node* node, Jacon_Node* child)
     }
     node->childs[node->child_count++] = child;
     return JACON_OK;
+}
+
+Jacon_Error
+Jacon_replace_child(Jacon_Node* parent, const char* name, Jacon_Node* new)
+{
+    if (parent == NULL || name == NULL || new == NULL) {
+        return JACON_ERR_NULL_PARAM;
+    }
+
+    for (size_t i = 0; i < parent->child_count; i++) {
+        Jacon_Node* child = parent->childs[i];
+
+        if (child->name && strcmp(child->name, name) == 0) {
+            new->parent = parent;
+            parent->childs[i] = new;
+            Jacon_free_node(child);
+            return JACON_OK;
+        }
+    }
+    return JACON_ERR_CHILD_NOT_FOUND;
+}
+
+Jacon_Error
+Jacon_remove_child_by_name(Jacon_Node* parent, const char* name)
+{
+    if (parent == NULL || name == NULL) {
+        return JACON_ERR_NULL_PARAM;
+    }
+
+    for (size_t i = 0; i < parent->child_count; i++) {
+        Jacon_Node* child = parent->childs[i];
+
+        if (child->name && strcmp(child->name, name) == 0) {
+            Jacon_free_node(child);
+
+            for (size_t j = i; j < parent->child_count - 1; j++) {
+                parent->childs[j] = parent->childs[j + 1];
+            }
+            parent->child_count--;
+            parent->childs[parent->child_count] = NULL;
+            return JACON_OK;
+        }
+    }
+    return JACON_ERR_CHILD_NOT_FOUND;
+}
+
+Jacon_Node*
+Jacon_get_child_by_name(Jacon_Node *parent, const char *name)
+{
+    if (parent == NULL || name == NULL) return NULL;
+    for (size_t i = 0; i < parent->child_count; i++) {
+        Jacon_Node *child = parent->childs[i];
+        if (strcmp(child->name, name) == 0) {
+            return child;
+        }
+    }
+    return NULL;
 }
 
 // Check if is a valid hex char
