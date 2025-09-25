@@ -28,6 +28,10 @@ CANPASSORFAIL_FILES=$(shell find $(LOCAL_REPO_DIR)/test_parsing/i_*.json)  # Mig
 
 all: $(TARGET)
 
+lib:
+	$(CC) $(CFLAGS) -c jacon.c -o jacon.o
+	ar rcs libjacon.a jacon.o
+
 jacon: jacon.c jacon.h
 	$(CC) $(CFLAGS) -o $(TARGET) jacon.c
 
