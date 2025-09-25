@@ -216,6 +216,12 @@ Jacon_Error
 Jacon_append_child(Jacon_Node* node, Jacon_Node* child);
 
 /**
+ * Add a node to a dictionnary
+ */
+Jacon_Error
+Jacon_add_node_to_map(Jacon_HashMap* map, Jacon_Node* node, const char* path_to_node);
+
+/**
  * Parse a Json string input into a queryable object
  */
 Jacon_Error
