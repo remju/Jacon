@@ -34,6 +34,15 @@ struct Jacon_StringBuilder {
     size_t capacity;
 };
 
+#ifndef JACON_TMP_STR_BUF_SIZE
+#define JACON_TMP_STR_BUF_SIZE    1024
+#endif
+/**
+ * Create a string to be used right away.
+ * String is stored in an internal buffer.
+ */
+const char* Jacon_tmp_str(const char *fmt, ...);
+
 #define JACON_MAP_DEFAULT_SIZE 10
 #define JACON_MAP_RESIZE_FACTOR 2
 typedef struct Jacon_HashMap Jacon_HashMap;

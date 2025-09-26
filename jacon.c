@@ -12,6 +12,16 @@
 #define Jacon_str_append_fmt_null(builder, ...) Jacon_str_append_fmt(builder, __VA_ARGS__, NULL)
 #define Jacon_defer_return(value) do { ret = (value); goto defer; } while (0)
 
+const char* Jacon_tmp_str(const char *fmt, ...)
+{
+    static char tmp_str_buf[JACON_TMP_STR_BUF_SIZE];
+    va_list args;
+    va_start(args, fmt);
+    vsprintf(tmp_str_buf, fmt, args);
+    va_end(args);
+    return tmp_str_buf;
+}
+
 Jacon_Error 
 Jacon_str_append(Jacon_StringBuilder* builder, ...) 
 {
